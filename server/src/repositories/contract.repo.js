@@ -100,26 +100,77 @@ export const create = async ({
 };
 
 /**
- * Check whether the given employee already has an active contract that
- * overlaps the proposed [start_date, end_date] period.
+ * Find an overlapping active contract for the given employee in the proposed
+ * [start_date, end_date] window, excluding a specific contract id (useful
+ * when activating an existing contract so it doesn't conflict with itself).
  *
  * Uses '9999-12-31' as a sentinel when end_date is open-ended (NULL).
  *
- * @param {number} employee_id
- * @param {string} start_date   - ISO date string (YYYY-MM-DD)
- * @param {string|null} end_date - ISO date string or null for open-ended
- * @returns {Promise<boolean>} true if an overlap exists.
+ * @param {number}      employee_id
+ * @param {string}      start_date      - ISO date string (YYYY-MM-DD)
+ * @param {string|null} end_date        - ISO date string or null for open-ended
+ * @param {number|null} [excludeId]     - Contract id to exclude from the check
+ * @returns {Promise<number|null>} The id of the overlapping contract, or null.
  */
-export const findOverlappingActiveContracts = async (employee_id, start_date, end_date) => {
+export const findOverlappingActiveContracts = async (
+    employee_id,
+    start_date,
+    end_date,
+    excludeId = null,
+) => {
     const effectiveEndDate = end_date ?? '9999-12-31';
     const sql = `
-        SELECT COUNT(*) AS count
+        SELECT id
         FROM contracts
         WHERE employee_id = $1
           AND status = 'active'
+          AND ($4::int IS NULL OR id != $4)
           AND start_date <= $3
-          AND (end_date IS NULL OR end_date >= $2);
+          AND (end_date IS NULL OR end_date >= $2)
+        LIMIT 1;
     `;
-    const { rows } = await query(sql, [employee_id, start_date, effectiveEndDate]);
-    return parseInt(rows[0].count, 10) > 0;
+    const { rows } = await query(sql, [employee_id, start_date, effectiveEndDate, excludeId]);
+    return rows.length > 0 ? rows[0].id : null;
+};
+
+/**
+ * Update only the mutable fields of a contract (end_date, status).
+ *
+ * @param {number}      id
+ * @param {string|null} end_date
+ * @param {string}      status
+ * @returns {Promise<object>} The updated contract row.
+ */
+export const updateContract = async (id, end_date, status) => {
+    const sql = `
+        UPDATE contracts
+        SET end_date   = $2,
+            status     = $3,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *;
+    `;
+    const { rows } = await query(sql, [id, end_date ?? null, status]);
+    return rows[0];
+};
+
+/**
+ * Expire a previously-active contract by setting its end_date and status.
+ * Used as a side-effect when a new contract is activated for the same employee.
+ *
+ * @param {number} id       - Contract to expire.
+ * @param {string} end_date - The last valid date for the old contract.
+ * @returns {Promise<object>} The updated contract row.
+ */
+export const expireContract = async (id, end_date) => {
+    const sql = `
+        UPDATE contracts
+        SET end_date   = $2,
+            status     = 'expired',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *;
+    `;
+    const { rows } = await query(sql, [id, end_date]);
+    return rows[0];
 };
