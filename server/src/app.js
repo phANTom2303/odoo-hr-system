@@ -6,6 +6,8 @@ import { logger } from '#config/logger.js';
 import { RESPONSE_CODES } from '#lib/common.js';
 import { AppError } from '#lib/errors.js';
 import taskRouter from '#routes/task.routes.js';
+import departmentRouter from '#routes/department.routes.js';
+import jobPositionRouter from '#routes/jobPosition.routes.js';
 import contractRouter from '#routes/contract.routes.js';
 import { initDatabase } from '#config/initDb.js';
 
@@ -24,9 +26,11 @@ await initDatabase();
 
 // ── Route Mounts ────────────────────────────────────────────────────
 app.use('/api/tasks', taskRouter);
+app.use('/api/departments', departmentRouter);
+app.use('/api/job-positions', jobPositionRouter);
 app.use('/api/contracts', contractRouter);
 
-// Global Error Handler (Good practice for a security platform)
+// Global Error Handler
 app.use((err, req, res, next) => {
     if (err instanceof AppError && err.isOperational) {
         logger.warn(`Operational Error [${err.status}]: ${err.message}`);
