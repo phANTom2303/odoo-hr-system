@@ -210,7 +210,7 @@ No reverse transitions allowed (expired/cancelled → active).
 
 ### Side-Effects
 
-- **Activating a contract:** If the employee has another `active` contract, that old contract must be expired first (set `end_date` = day before new contract's `start_date`, `status = 'expired'`). This supports the promotion / mid-period change flow.
+- **Activating a contract:** If the employee has another `active` contract, that old contract must be expired first (set `end_date` = day before new contract's `start_date`, `status = 'expired'`). This supports the promotion / mid-period change flow. Ths Expiration must be done via HR manually. TO ease this process, we can prompt the HR "Would you like to disable/end the prexisting contract" This helpful prompt can be done later.
 
 ---
 

@@ -1,38 +1,99 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '../../context/AppContext';
+import { getContractById, createContract, updateContract } from '../../api/contracts';
 
 export default function ContractForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { contracts, setContracts, employees, schedules, salaryStructures } = useApp();
+  const queryClient = useQueryClient();
+  const { employees, schedules, salaryStructures } = useApp();
 
   const isNew = id === 'new';
-  const existing = isNew ? null : contracts.find(c => c.id === Number(id));
 
-  const [form, setForm] = useState(existing || {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['contract', id],
+    queryFn: () => getContractById(id),
+    enabled: !isNew,
+  });
+
+  const existing = data?.data;
+
+  const [form, setForm] = useState({
     ref: '', employeeId: '', employeeName: '', department: '', jobPosition: '',
     startDate: '', endDate: '', wage: '', status: 'Draft',
     schedule: '', structure: 'Employee Salary',
   });
   const [editing, setEditing] = useState(isNew);
 
+  useEffect(() => {
+    if (existing) {
+      const dbStatusToUI = { 'draft': 'Draft', 'active': 'Running', 'expired': 'Expired', 'cancelled': 'Cancelled' };
+      setForm({
+        ref: `Contract #${existing.id}`,
+        employeeId: existing.employee_id || '',
+        employeeName: existing.employee_name || '',
+        department: existing.department_name || '',
+        jobPosition: existing.job_position_name || '',
+        startDate: existing.start_date ? existing.start_date.slice(0, 10) : '',
+        endDate: existing.end_date ? existing.end_date.slice(0, 10) : '',
+        wage: existing.wage || '',
+        status: dbStatusToUI[existing.status] || 'Draft',
+        schedule: existing.schedule_name || '',
+        structure: existing.salary_structure_name || '',
+      });
+    }
+  }, [existing]);
+
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const save = () => {
-    if (isNew) {
-      const emp = employees.find(e => e.id === Number(form.employeeId));
-      const next = { ...form, id: Date.now(), employeeName: emp?.name || form.employeeName, wage: Number(form.wage) };
-      setContracts(prev => [...prev, next]);
-      navigate('/contracts');
-    } else {
-      setContracts(prev => prev.map(c => c.id === Number(id) ? { ...c, ...form, wage: Number(form.wage) } : c));
-      setEditing(false);
+  const mutation = useMutation({
+    mutationFn: (dataToSave) => isNew ? createContract(dataToSave) : updateContract(dataToSave),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      if (isNew) {
+        navigate('/contracts');
+      } else {
+        setEditing(false);
+      }
+    },
+    onError: (error) => {
+      console.error("Failed to save contract", error);
+      alert("Failed to save contract");
     }
+  });
+
+  const save = () => {
+    const uiStatusToDB = { 'Draft': 'draft', 'Running': 'active', 'Expired': 'expired', 'Cancelled': 'cancelled' };
+    
+    let dataToSave;
+    if (isNew) {
+      dataToSave = {
+        employee_id: Number(form.employeeId),
+        wage: Number(form.wage),
+        start_date: form.startDate,
+        end_date: form.endDate || null,
+        status: uiStatusToDB[form.status] || 'draft',
+        schedule_id: 1, 
+        salary_structure_id: 1, 
+      };
+    } else {
+      dataToSave = {
+        id: Number(id),
+        wage: Number(form.wage),
+        start_date: form.startDate,
+        end_date: form.endDate || null,
+        status: uiStatusToDB[form.status] || 'draft',
+      };
+    }
+    
+    mutation.mutate(dataToSave);
   };
 
-  if (!isNew && !existing) return <div><p>Contract not found.</p></div>;
+  if (!isNew && isLoading) return <div><p>Loading...</p></div>;
+  if (!isNew && !existing && !isLoading) return <div><p>Contract not found.</p></div>;
 
   const statusBadge = (s) => {
     if (s === 'Running') return 'badge-green';
@@ -59,7 +120,9 @@ export default function ContractForm() {
           {(editing || isNew) && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/contracts') : setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>Save</button>
+              <button className="btn btn-primary" onClick={save} disabled={mutation.isPending}>
+                {mutation.isPending ? 'Saving...' : 'Save'}
+              </button>
             </>
           )}
         </div>
@@ -112,6 +175,7 @@ export default function ContractForm() {
               <label>Working Schedule</label>
               <select className="form-control" value={form.schedule} disabled={!editing} onChange={e => setField('schedule', e.target.value)}>
                 <option value="">— Select —</option>
+                {!isNew && !schedules.find(s => s.name === form.schedule) && <option value={form.schedule}>{form.schedule}</option>}
                 {schedules.map(s => <option key={s.id}>{s.name}</option>)}
               </select>
             </div>
