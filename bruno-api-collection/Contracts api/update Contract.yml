@@ -1,0 +1,22 @@
+info:
+  name: update Contract
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/contracts/1
+  body:
+    type: json
+    data: |-
+      {
+        "status":"expired",
+        "end_date":"2026-09-05"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

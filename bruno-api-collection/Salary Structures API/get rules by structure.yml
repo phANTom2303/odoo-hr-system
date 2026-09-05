@@ -1,0 +1,9 @@
+info:
+  name: get rules by structure
+  type: http
+  seq: 7
+
+http:
+  method: GET
+  url: http://localhost:5001/api/salary-structures/1/rules
+  auth: inherit

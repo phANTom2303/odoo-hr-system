@@ -1,0 +1,7 @@
+info:
+  name: Time Off Types API
+  type: folder
+  seq: 1
+
+request:
+  auth: inherit

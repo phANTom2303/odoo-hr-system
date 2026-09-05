@@ -1,0 +1,31 @@
+info:
+  name: create employee
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: http://localhost:5001/api/employees
+  body:
+    type: json
+    data: |2
+          {
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "johndoe@example.com",
+            "password": "securepassword",
+            "phone": "+1234567890",
+            "role": "employee",
+            "employment_status": "active",
+            "employee_type": "full_time",
+            "department_id": 1,
+            "job_position_id": 1,
+            "date_of_joining": "2024-01-01"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

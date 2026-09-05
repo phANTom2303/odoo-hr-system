@@ -1,0 +1,30 @@
+info:
+  name: create contract
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/contracts
+  body:
+    type: json
+    data: |2
+          {
+            "employee_id": 1,
+            "schedule_id": 1,
+            "salary_structure_id": 1,
+            "overtime_policy_id": 1,
+            "department_id": 1,
+            "job_position_id": 1,
+            "wage": 5000.00,
+            "start_date": "2028-09-01",
+            "end_date": "2029-08-31",
+            "status": "active"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

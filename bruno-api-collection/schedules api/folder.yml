@@ -1,0 +1,6 @@
+info:
+  name: schedules api
+  type: folder
+
+request:
+  auth: inherit

@@ -1,0 +1,20 @@
+info:
+  name: create rule (fixed)
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: http://localhost:5001/api/salary-structures/1/rules
+  body:
+    type: json
+    data: |
+      {
+        "code": "BASIC",
+        "name": "Basic Salary",
+        "category": "Basic",
+        "sequence": 1,
+        "rule_type": "fixed",
+        "fixed_amount": 1000
+      }
+  auth: inherit

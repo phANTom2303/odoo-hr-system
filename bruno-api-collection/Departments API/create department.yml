@@ -1,0 +1,21 @@
+info:
+  name: create department
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/departments
+  body:
+    type: json
+    data: |2
+          {
+            "name": "Engineering"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

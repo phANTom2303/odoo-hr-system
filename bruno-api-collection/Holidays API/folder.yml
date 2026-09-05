@@ -1,0 +1,6 @@
+info:
+  name: Holidays API
+  type: folder
+
+request:
+  auth: inherit
