@@ -95,8 +95,8 @@ export const create = async (fields) => {
         fields.password_hash, fields.role ?? 'employee',
         fields.employment_status ?? 'active', fields.employee_type ?? 'full_time',
         fields.department_id ?? null, fields.job_position_id ?? null,
-        fields.manager_id ?? null, fields.date_of_joining ?? null,
-        fields.date_of_birth ?? null, fields.bank_name ?? null,
+        fields.manager_id ?? null, fields.date_of_joining || null,
+        fields.date_of_birth || null, fields.bank_name ?? null,
         fields.bank_account ?? null, fields.address ?? null,
     ]);
     return rows[0];
@@ -109,6 +109,7 @@ export const update = async (id, fields) => {
         'manager_id','date_of_joining','date_of_leaving','date_of_birth',
         'bank_name','bank_account','address',
     ];
+    const dateKeys = new Set(['date_of_joining', 'date_of_leaving', 'date_of_birth']);
     const setClauses = [];
     const values = [];
     let p = 1;
@@ -116,7 +117,9 @@ export const update = async (id, fields) => {
     for (const key of allowedKeys) {
         if (fields[key] !== undefined) {
             setClauses.push(`${key} = $${p++}`);
-            values.push(fields[key]);
+            // Normalize empty strings to null for date fields
+            const value = dateKeys.has(key) && fields[key] === '' ? null : fields[key];
+            values.push(value);
         }
     }
     if (setClauses.length === 0) return findById(id);
