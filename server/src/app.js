@@ -8,7 +8,6 @@ import { AppError } from '#lib/errors.js';
 import { initDatabase } from '#config/initDb.js';
 
 // ── Routers ──────────────────────────────────────────────────────────
-import taskRouter            from '#routes/task.routes.js';
 import contractRouter        from '#routes/contract.routes.js';
 import departmentRouter      from '#routes/department.routes.js';
 import jobPositionRouter     from '#routes/jobPosition.routes.js';
@@ -32,7 +31,6 @@ app.use(express.json());
 await initDatabase();
 
 // ── Route Mounts ─────────────────────────────────────────────────────
-app.use('/api/tasks',             taskRouter);
 app.use('/api/contracts',         contractRouter);
 app.use('/api/departments',      departmentRouter);
 app.use('/api/job-positions',    jobPositionRouter);
