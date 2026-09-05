@@ -21,7 +21,7 @@ export const getAll = asyncHandler(async (req, res) => {
 /** GET /api/contracts/:id */
 export const getById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const item = await contractService.getById(id);
+    const item = await contractService.getBtayId(id);
 
     if (!item) {
         throw new NotFoundError('Contract not found');
