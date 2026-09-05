@@ -1,0 +1,50 @@
+info:
+  name: get payslip by id
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: http://localhost:5001/api/payslips/14
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    The Salary Computation screen: one payslip with its full breakdown.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    On success: 200 { success: true, data: { ...payslip, lines: [...],
+    totals: { basic, allowance, gross, deduction, net } } }
+
+    lines[] is a SNAPSHOT frozen at compute time — rule_code, rule_name,
+    category, sequence and amount are copied from the salary rule, so later
+    edits to the rules never alter a historical payslip. Ordered by sequence,
+    which is the order the engine executed them in.
+
+    Every line with category "deduction" is stored NEGATIVE — PF, PT and the
+    synthetic UNPAID_LV alike. All other categories are positive, so the
+    deduction lines can be summed directly and the invariant holds:
+
+      totals.deduction === -payslip.total_deductions
+      net_salary       === gross_salary - total_deductions
+
+    Use total_deductions for a "Total Deductions" figure (positive magnitude),
+    and the signed line amounts for a ledger that adds up to net.
+
+    Proration metadata per line: contract_id, segment_start, segment_end and
+    proration_factor (1.0000 = the full period). A payslip spanning a
+    mid-period contract change carries one line per rule PER SEGMENT, and its
+    payslip.contract_id is null.
+
+    Read gross_salary / total_deductions / net_salary from the payslip
+    columns, not from totals — totals is a signed per-category roll-up of the
+    line rows, so on a multi-segment payslip the GROSS and NET rows repeat
+    the whole-payslip figure once per segment.
+
+    404 when the payslip does not exist.

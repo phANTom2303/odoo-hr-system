@@ -1,0 +1,32 @@
+info:
+  name: review payslip
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/payslips/1/review
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    Acknowledges a payslip's warnings so the pay run can be validated.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    Sets is_reviewed = true and records reviewed_by (from the JWT) and
+    reviewed_at. No request body.
+
+    This is how you clear the 409 from POST /api/pay-runs/:id/validate:
+    that call names the employees whose payslips carry an unreviewed
+    error-severity warning — review each one, then validate again.
+
+    Reviewing acknowledges a warning; it does not recompute or change any
+    amount.
+
+    409 for a payslip already paid or cancelled; 404 when it does not exist.

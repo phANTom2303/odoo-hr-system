@@ -1,0 +1,43 @@
+info:
+  name: get eligible employees
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://localhost:5001/api/pay-runs/eligible-employees?start_date=2026-09-01&end_date=2026-09-30
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    Step 2 of the pay run wizard: the employees you may select for a period.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    Required query params (400 if missing):
+      • start_date — YYYY-MM-DD
+      • end_date   — YYYY-MM-DD  (must be >= start_date)
+
+    Optional query params:
+      • department_id  — e.g. 1 (Engineering)
+      • employee_type  — full_time | part_time | contract | intern
+
+    Returns active employees holding at least one active contract that
+    overlaps the period — one row per (employee, contract). Useful fields:
+      • contract_count > 1        → this employee will be PRORATED across
+                                    contract segments
+      • has_overlapping_payslip   → a non-paid payslip already covers this
+                                    period; computing again raises the
+                                    DUPLICATE_PAYSLIP error warning
+
+    Against the seed data for Sep 2026 this returns Anish (1), Priya (2),
+    Rahul (3) and Arjun (5). Neha (4) is absent — her contract ended
+    2026-01-19, so she has no active contract in the period.
+
+    IMPORTANT: this route is registered before /:id. Do not reorder it, or
+    Express matches "eligible-employees" as a pay run id.
