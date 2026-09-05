@@ -21,7 +21,7 @@ export const getAll = asyncHandler(async (req, res) => {
 /** GET /api/contracts/:id */
 export const getById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const item = await contractService.getBtayId(id);
+    const item = await contractService.getById(id);
 
     if (!item) {
         throw new NotFoundError('Contract not found');
@@ -30,5 +30,44 @@ export const getById = asyncHandler(async (req, res) => {
     res.status(RESPONSE_CODES.SUCCESS_CODE).json({
         success: true,
         data: item,
+    });
+});
+
+/**
+ * POST /api/contracts
+ * Creates a new contract.
+ * Required body: employee_id, schedule_id, salary_structure_id, wage, start_date.
+ * Optional body: overtime_policy_id, department_id, job_position_id, end_date, status.
+ */
+export const createContract = asyncHandler(async (req, res) => {
+    const {
+        employee_id,
+        schedule_id,
+        salary_structure_id,
+        overtime_policy_id,
+        department_id,
+        job_position_id,
+        wage,
+        start_date,
+        end_date,
+        status,
+    } = req.body;
+
+    const contract = await contractService.createContract({
+        employee_id,
+        schedule_id,
+        salary_structure_id,
+        overtime_policy_id,
+        department_id,
+        job_position_id,
+        wage,
+        start_date,
+        end_date,
+        status,
+    });
+
+    res.status(RESPONSE_CODES.CREATED_CODE).json({
+        success: true,
+        data: contract,
     });
 });
