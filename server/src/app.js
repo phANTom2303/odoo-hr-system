@@ -8,6 +8,7 @@ import { AppError } from '#lib/errors.js';
 import taskRouter from '#routes/task.routes.js';
 import departmentRouter from '#routes/department.routes.js';
 import jobPositionRouter from '#routes/jobPosition.routes.js';
+import contractRouter from '#routes/contract.routes.js';
 import { initDatabase } from '#config/initDb.js';
 
 const app = express();
@@ -15,7 +16,6 @@ const app = express();
 // Global Middlewares
 app.use(helmet());
 app.use(cors({
-    origin: process.env.CLIENT_URL,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -28,8 +28,9 @@ await initDatabase();
 app.use('/api/tasks', taskRouter);
 app.use('/api/departments', departmentRouter);
 app.use('/api/job-positions', jobPositionRouter);
+app.use('/api/contracts', contractRouter);
 
-// Global Error Handler (Good practice for a security platform)
+// Global Error Handler
 app.use((err, req, res, next) => {
     if (err instanceof AppError && err.isOperational) {
         logger.warn(`Operational Error [${err.status}]: ${err.message}`);
