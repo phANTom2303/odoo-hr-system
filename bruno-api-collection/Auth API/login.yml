@@ -15,20 +15,15 @@ http:
           }
   auth: inherit
 
-# On success the server responds with:
-#   200 { success: true, data: { id, name, email, role, initials, ... } }
-# and sets an HttpOnly cookie named "token" that is used for all subsequent
-# authenticated requests.
-#
-# Demo credentials (all passwords are "password123"):
-#   anish@peoplepay.dev  — admin
-#   priya@peoplepay.dev  — hr_manager
-#   rahul@peoplepay.dev  — employee
-#   neha@peoplepay.dev   — employee (part-time)
-#   arjun@peoplepay.dev  — employee (intern)
-
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+
+docs: |2
+    All demo credentials
+
+    • anish@peoplepay.dev / password123 → admin
+    • priya@peoplepay.dev / password123 → hr_manager
+    • rahul@peoplepay.dev / password123 → employee
