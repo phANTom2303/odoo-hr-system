@@ -10,5 +10,6 @@ const router = Router();
 router.get('/', contractController.getAll);
 router.get('/:id', contractController.getById);
 router.post('/', contractController.createContract);
+router.put('/:id', contractController.updateContract);
 
 export default router;

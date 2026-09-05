@@ -5,7 +5,13 @@
  */
 
 import * as contractRepo from '#repositories/contract.repo.js';
-import { BadRequestError, ConflictError } from '#lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '#lib/errors.js';
+
+// ── Allowed status transitions ───────────────────────────────────────
+const VALID_TRANSITIONS = new Map([
+    ['draft',  new Set(['active', 'cancelled'])],
+    ['active', new Set(['expired', 'cancelled'])],
+]);
 
 // ── Service Methods ─────────────────────────────────────────────────
 
@@ -57,14 +63,16 @@ export const createContract = async (data) => {
 
     // ── Overlap check (only when activating a contract) ──────────────
     if (status === 'active') {
-        const hasOverlap = await contractRepo.findOverlappingActiveContracts(
+        const overlappingId = await contractRepo.findOverlappingActiveContracts(
             employee_id,
             start_date,
             end_date ?? null,
         );
 
-        if (hasOverlap) {
-            throw new ConflictError('Overlapping active contract exists');
+        if (overlappingId !== null) {
+            throw new ConflictError(
+                `Please deactivate / specify accurate end date for contract number ${overlappingId} to create a new contract for this employee`,
+            );
         }
     }
 
@@ -84,3 +92,77 @@ export const createContract = async (data) => {
 
     return contract;
 };
+
+/**
+ * Update a contract's mutable fields (end_date, status only).
+ *
+ * Business rules enforced:
+ *  - Only `end_date` and `status` are writable; any other field in the body is ignored.
+ *  - `status` must follow the allowed transition graph.
+ *  - `end_date` (when provided) must be >= the contract's start_date.
+ *  - No reverse transitions from terminal states (expired / cancelled).
+ *  - Activating a draft: overlap-checked against other active contracts for the same employee.
+ *  - Side-effect on activation: any other active contract for the employee is expired
+ *    (end_date set to one day before the new contract's start_date).
+ *
+ * @param {number} id   - Contract to update.
+ * @param {object} data - May contain `end_date` and/or `status`.
+ * @returns {Promise<object>} The updated contract row.
+ * @throws {NotFoundError}   When the contract does not exist.
+ * @throws {BadRequestError} When the transition or date is invalid.
+ * @throws {ConflictError}   When activating would create an overlap.
+ */
+export const updateContract = async (id, data) => {
+    const { end_date, status } = data;
+
+    // ── Fetch current state ──────────────────────────────────────────
+    const current = await contractRepo.findById(id);
+    if (!current) {
+        throw new NotFoundError('Contract not found');
+    }
+
+    const newStatus  = status  !== undefined ? status  : current.status;
+    const newEndDate = end_date !== undefined ? end_date : current.end_date;
+
+    // ── Validate status transition ───────────────────────────────────
+    if (newStatus !== current.status) {
+        const allowed = VALID_TRANSITIONS.get(current.status);
+        if (!allowed || !allowed.has(newStatus)) {
+            throw new BadRequestError(
+                `Invalid status transition: '${current.status}' → '${newStatus}'. ` +
+                `Allowed transitions from '${current.status}': ${allowed ? [...allowed].join(', ') : 'none'}.`,
+            );
+        }
+    }
+
+    // ── Validate end_date ────────────────────────────────────────────
+    if (newEndDate !== null && newEndDate !== undefined) {
+        const startMs  = new Date(current.start_date).getTime();
+        const endMs    = new Date(newEndDate).getTime();
+        if (endMs < startMs) {
+            throw new BadRequestError('end_date must be greater than or equal to start_date');
+        }
+    }
+
+    // ── Overlap check when activating ────────────────────────────────
+    if (newStatus === 'active' && current.status !== 'active') {
+        const overlappingId = await contractRepo.findOverlappingActiveContracts(
+            current.employee_id,
+            current.start_date,
+            newEndDate ?? null,
+            id,   // exclude self
+        );
+
+        if (overlappingId !== null) {
+            throw new ConflictError(
+                `Please deactivate / specify accurate end date for contract number ${overlappingId} to activate a new contract for this employee`,
+            );
+        }
+    }
+
+    // ── Persist ──────────────────────────────────────────────────────
+    const updated = await contractRepo.updateContract(id, newEndDate, newStatus);
+    return updated;
+};
+
+

@@ -71,3 +71,35 @@ export const createContract = asyncHandler(async (req, res) => {
         data: contract,
     });
 });
+
+/**
+ * PUT /api/contracts/:id
+ * Updates a contract's mutable fields only: end_date, status.
+ * All other fields are immutable; any extra keys in the body are silently ignored.
+ */
+export const updateContract = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { end_date, status } = req.body;
+
+    if(!id){
+        return res.status(RESPONSE_CODES.BAD_REQUEST_CODE).json({
+            success:false,
+            message:"Please provide contract ID is not provided"
+        })
+    }
+
+    if(!end_date && !status){
+        return res.status(RESPONSE_CODES.BAD_REQUEST_CODE).json({
+            success:false,
+            message:"Please provide at least one attribute to update"
+        })
+    }
+
+    const updated = await contractService.updateContract(id, { end_date, status });
+
+    res.status(RESPONSE_CODES.SUCCESS_CODE).json({
+        success: true,
+        data: updated,
+    });
+});
+
