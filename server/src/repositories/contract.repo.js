@@ -8,19 +8,31 @@ import { query } from '#config/db.js';
  * Fetch all contracts with specific fields.
  * @returns {Promise<object[]>}
  */
-export const findAll = async () => {
+export const findAll = async ({ employee_id } = {}) => {
+    const conditions = [];
+    const values = [];
+
+    if (employee_id) {
+        conditions.push(`c.employee_id = $${values.length + 1}`);
+        values.push(Number(employee_id));
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
     const sql = `
         SELECT 
-            c.id, 
+            c.id,
+            c.employee_id,
             u.first_name || ' ' || u.last_name AS employee_name, 
             c.start_date, 
             c.end_date, 
             c.status 
         FROM contracts c
         JOIN users u ON c.employee_id = u.id
+        ${where}
         ORDER BY c.created_at DESC;
     `;
-    const { rows } = await query(sql);
+    const { rows } = await query(sql, values);
     return rows;
 };
 
