@@ -1,44 +1,70 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { ArrowLeft } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAllocationById, createAllocation, approveAllocation, refuseAllocation } from '../../api/allocations';
+import { getEmployees } from '../../api/employees';
+import { getTimeOffTypes } from '../../api/timeOffTypes';
 
 export default function AllocationForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { allocations, setAllocations, employees, timeOffTypes, approveAllocation } = useApp();
-
+  const queryClient = useQueryClient();
   const isNew = id === 'new';
-  const existing = isNew ? null : allocations.find(a => a.id === Number(id));
 
-  const [form, setForm] = useState(existing || {
-    employeeId: '', employeeName: '', typeId: '', typeName: '',
-    allocated: 0, taken: 0, remaining: 0, status: 'To Approve',
-    approver: '', validity: '', description: '',
-  });
   const [editing, setEditing] = useState(isNew);
+  const [form, setForm] = useState({
+    employee_id: '', time_off_type_id: '',
+    start_date: '', end_date: '',
+    allocated_amount: '', status: 'draft',
+  });
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const save = () => {
-    if (isNew) {
-      const emp  = employees.find(e => e.id === Number(form.employeeId));
-      const type = timeOffTypes.find(t => t.id === Number(form.typeId));
-      const newA = { ...form, id: Date.now(), employeeName: emp?.name || '', typeName: type?.name || '', remaining: Number(form.allocated) - Number(form.taken) };
-      setAllocations(prev => [...prev, newA]);
-      navigate('/timeoff/allocations');
-    } else {
-      setAllocations(prev => prev.map(a => a.id === Number(id) ? { ...a, ...form } : a));
-      setEditing(false);
-    }
-  };
+  const { data: alloc, isLoading } = useQuery({
+    queryKey: ['allocation', id],
+    queryFn: () => getAllocationById(id).then(r => r.data),
+    enabled: !isNew,
+  });
 
-  if (!isNew && !existing) return <div><p>Allocation not found.</p></div>;
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => getEmployees().then(r => r.data),
+  });
+
+  const { data: typesData } = useQuery({
+    queryKey: ['timeOffTypes'],
+    queryFn: () => getTimeOffTypes().then(r => r.data),
+  });
+
+  const employees = employeesData ?? [];
+  const types = typesData ?? [];
+  const display = isNew ? form : (alloc ?? form);
+
+  const createMutation = useMutation({
+    mutationFn: createAllocation,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['allocations'] }); navigate('/timeoff/allocations'); },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: () => approveAllocation(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['allocations'] }); queryClient.invalidateQueries({ queryKey: ['allocation', id] }); },
+  });
+
+  const refuseMutation = useMutation({
+    mutationFn: () => refuseAllocation(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['allocations'] }); queryClient.invalidateQueries({ queryKey: ['allocation', id] }); },
+  });
+
+  const save = () => createMutation.mutate(form);
 
   const statusBadge = (s) => {
-    if (s === 'Approved')   return 'badge-green';
-    if (s === 'To Approve') return 'badge-yellow';
+    if (s === 'approved') return 'badge-green';
+    if (s === 'draft')    return 'badge-yellow';
+    if (s === 'refused')  return 'badge-red';
     return 'badge-gray';
   };
+
+  if (!isNew && isLoading) return <div><p>Loading…</p></div>;
 
   return (
     <div>
@@ -46,25 +72,29 @@ export default function AllocationForm() {
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/timeoff/allocations')}>
           <ArrowLeft size={14} /> Allocations
         </button>
-        <span> / {isNew ? 'New Allocation' : form.employeeName}</span>
+        <span> / {isNew ? 'New Allocation' : display.employee_name}</span>
       </div>
 
       <div className="page-header">
         <div>
-          <h1>{isNew ? 'New Allocation' : `Allocation / ${form.employeeName}`}</h1>
-          {!isNew && <span className={`badge ${statusBadge(form.status)}`} style={{ marginTop: 4 }}>{form.status}</span>}
+          <h1>{isNew ? 'New Allocation' : `Allocation — ${display.employee_name}`}</h1>
+          {!isNew && display.status && (
+            <span className={`badge ${statusBadge(display.status)}`} style={{ marginTop: 4 }}>{display.status}</span>
+          )}
         </div>
         <div className="d-flex gap-2">
-          {!isNew && form.status === 'To Approve' && (
-            <button className="btn btn-success" onClick={() => { approveAllocation(Number(id)); navigate('/timeoff/allocations'); }}>
-              <Check size={14} /> Approve
-            </button>
-          )}
-          {!isNew && !editing && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
-          {(editing || isNew) && (
+          {!isNew && display.status === 'draft' && (
             <>
-              <button className="btn btn-secondary" onClick={() => isNew ? navigate('/timeoff/allocations') : setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>Save</button>
+              <button className="btn btn-success" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}>Approve</button>
+              <button className="btn btn-danger"  onClick={() => refuseMutation.mutate()}  disabled={refuseMutation.isPending}>Refuse</button>
+            </>
+          )}
+          {isNew && (
+            <>
+              <button className="btn btn-secondary" onClick={() => navigate('/timeoff/allocations')}>Cancel</button>
+              <button className="btn btn-primary" onClick={save} disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
             </>
           )}
         </div>
@@ -76,48 +106,50 @@ export default function AllocationForm() {
             <div className="form-group">
               <label>Employee</label>
               {isNew ? (
-                <select className="form-control" value={form.employeeId} onChange={e => setField('employeeId', e.target.value)}>
+                <select className="form-control" value={form.employee_id} onChange={e => setField('employee_id', e.target.value)}>
                   <option value="">Select employee</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
                 </select>
-              ) : <input className="form-control" value={form.employeeName} disabled />}
-            </div>
-            <div className="form-group">
-              <label>Taken</label>
-              <input className="form-control" type="number" value={form.taken} disabled={!editing} onChange={e => setField('taken', Number(e.target.value))} />
+              ) : <input className="form-control" value={display.employee_name ?? ''} disabled />}
             </div>
             <div className="form-group">
               <label>Time Off Type</label>
               {isNew ? (
-                <select className="form-control" value={form.typeId} onChange={e => setField('typeId', e.target.value)}>
+                <select className="form-control" value={form.time_off_type_id} onChange={e => setField('time_off_type_id', e.target.value)}>
                   <option value="">Select type</option>
-                  {timeOffTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
-              ) : <input className="form-control" value={form.typeName} disabled />}
+              ) : <input className="form-control" value={display.time_off_type_name ?? ''} disabled />}
             </div>
             <div className="form-group">
-              <label>Remaining</label>
-              <input className="form-control" value={`${Number(form.allocated) - Number(form.taken)} Days`} disabled />
+              <label>Start Date</label>
+              <input className="form-control" type="date"
+                value={isNew ? form.start_date : display.start_date?.slice(0, 10) ?? ''}
+                disabled={!isNew} onChange={e => setField('start_date', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>End Date</label>
+              <input className="form-control" type="date"
+                value={isNew ? form.end_date : display.end_date?.slice(0, 10) ?? ''}
+                disabled={!isNew} onChange={e => setField('end_date', e.target.value)} />
             </div>
             <div className="form-group">
               <label>Allocated Days</label>
-              <input className="form-control" type="number" value={form.allocated} disabled={!editing} onChange={e => setField('allocated', Number(e.target.value))} />
+              <input className="form-control no-spinner" type="number"
+                value={isNew ? form.allocated_amount : display.allocated_amount ?? ''}
+                disabled={!isNew} onChange={e => setField('allocated_amount', e.target.value)} />
             </div>
             <div className="form-group">
-              <label>Approver</label>
-              <input className="form-control" value={form.approver} disabled={!editing} onChange={e => setField('approver', e.target.value)} />
+              <label>Taken</label>
+              <input className="form-control" value={display.taken ?? 0} disabled />
+            </div>
+            <div className="form-group">
+              <label>Remaining</label>
+              <input className="form-control" value={display.remaining ?? '—'} disabled />
             </div>
             <div className="form-group">
               <label>Status</label>
-              <input className="form-control" value={form.status} disabled />
-            </div>
-            <div className="form-group">
-              <label>Validity</label>
-              <input className="form-control" value={form.validity} disabled={!editing} onChange={e => setField('validity', e.target.value)} />
-            </div>
-            <div className="form-group span-2">
-              <label>Description</label>
-              <textarea className="form-control" value={form.description} disabled={!editing} onChange={e => setField('description', e.target.value)} />
+              <input className="form-control" value={display.status ?? ''} disabled />
             </div>
           </div>
         </div>
