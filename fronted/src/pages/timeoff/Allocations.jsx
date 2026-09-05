@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Check } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp, useAuth } from '../../context/AppContext';
 
 export default function Allocations() {
   const { allocations, approveAllocation } = useApp();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const empFilter = params.get('employee');
   const [search, setSearch] = useState('');
 
-  const filtered = allocations.filter(a => {
+  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
+
+  // TODO: The backend should ideally filter allocations for the Employee role.
+  const allowedAllocations = isEmployeeOnly && currentUser?.employeeId
+    ? allocations.filter(a => a.employeeId === currentUser.employeeId)
+    : allocations;
+
+  const filtered = allowedAllocations.filter(a => {
     const matchEmp = empFilter ? a.employeeId === Number(empFilter) : true;
     const matchSearch = a.employeeName.toLowerCase().includes(search.toLowerCase()) ||
       a.typeName.toLowerCase().includes(search.toLowerCase());
@@ -31,9 +39,11 @@ export default function Allocations() {
           <div className="page-breadcrumb">Time Off ▸ <span>Allocations</span></div>
           <h1>Allocations</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/timeoff/allocations/new')}>
-          <Plus size={15} /> New
-        </button>
+        {!isEmployeeOnly && (
+          <button className="btn btn-primary" onClick={() => navigate('/timeoff/allocations/new')}>
+            <Plus size={15} /> New
+          </button>
+        )}
       </div>
 
       <div className="toolbar">
@@ -69,7 +79,7 @@ export default function Allocations() {
                   </td>
                   <td><span className={`badge ${statusBadge(a.status)}`}>{a.status}</span></td>
                   <td>
-                    {a.status === 'To Approve' && (
+                    {!isEmployeeOnly && a.status === 'To Approve' && (
                       <button className="btn btn-success btn-sm" onClick={() => approveAllocation(a.id)}>
                         <Check size={12} /> Approve
                       </button>

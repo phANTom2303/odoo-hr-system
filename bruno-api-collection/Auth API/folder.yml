@@ -1,0 +1,7 @@
+info:
+  name: Auth API
+  type: folder
+  seq: 0
+
+request:
+  auth: inherit

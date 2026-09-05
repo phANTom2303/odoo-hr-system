@@ -46,3 +46,33 @@ export const requireAuth = (...allowedRoles) => {
         }
     };
 };
+
+export const requireOwnerOrRoles = (paramKey, ...allowedRoles) => {
+    return async (req, res, next) => {
+        try {
+            const token = req.cookies?.token;
+            if (!token) return res.status(401).json({ message: 'Authentication required. No token provided.' });
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            
+            // Check if user is the owner
+            const resourceId = req.params[paramKey];
+            const isOwner = resourceId && decoded.sub === parseInt(resourceId, 10);
+            
+            // Check if user has an allowed role
+            const hasRole = allowedRoles.includes(decoded.role);
+            
+            if (!isOwner && !hasRole) {
+                return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+            }
+
+            req.user = decoded;
+            next();
+        } catch (error) {
+            if (error.name === 'TokenExpiredError') return res.status(401).json({ message: 'Token expired.' });
+            if (error.name === 'JsonWebTokenError') return res.status(401).json({ message: 'Invalid token signature.' });
+            console.error('[Auth Middleware Error]:', error);
+            return res.status(500).json({ message: 'Internal server error during authentication.' });
+        }
+    };
+};

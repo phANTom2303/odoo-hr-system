@@ -114,11 +114,27 @@ function AttendanceWidget() {
   );
 }
 
+/** Map DB enum roles to display labels */
+const ROLE_LABELS = {
+  admin:               'Admin',
+  hr_manager:          'HR Manager',
+  hr_payroll_user:     'HR Payroll User',
+  hr_payroll_manager:  'HR Payroll Manager',
+  employee:            'Employee',
+};
+
 export default function Topbar() {
   const { currentUser, logout } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
+
+  const handleLogout = async () => {
+    await logout();
+    // AppShell will re-render to show Login once currentUser is null
+  };
+
+  const roleLabel = ROLE_LABELS[currentUser?.role] ?? currentUser?.role ?? '';
 
   return (
     <div className="topbar">
@@ -126,31 +142,46 @@ export default function Topbar() {
       <div style={{ fontSize: 12, color: 'var(--gray-300)', marginRight: 8 }}>HR</div>
 
       <nav className="topbar-nav">
-        <NavItem label="Employees ▾" active={path.startsWith('/employees') || path.startsWith('/schedules')}
-          children={[
-            { label: 'Employees',        to: '/employees' },
-            { label: 'Contracts',        to: '/contracts' },
-            { label: 'Working Schedules',to: '/schedules' },
-          ]}
-        />
+        {['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) ? (
+          <NavItem label="Employees ▾" active={path.startsWith('/employees') || path.startsWith('/schedules') || path.startsWith('/contracts')}
+            children={[
+              { label: 'Employees',        to: '/employees' },
+              { label: 'Contracts',        to: '/contracts' },
+              { label: 'Working Schedules',to: '/schedules' },
+            ]}
+          />
+        ) : (
+          <NavItem label="My Schedule" to="/schedules" active={path.startsWith('/schedules')} />
+        )}
+
         <NavItem label="Attendance" to="/attendance" active={path.startsWith('/attendance')} />
+
         <NavItem label="Time Off ▾" active={path.startsWith('/timeoff')}
           children={[
             { label: 'Requests',       to: '/timeoff/requests' },
             { label: 'Allocations',    to: '/timeoff/allocations' },
-            { label: 'Time Off Types', to: '/timeoff/types' },
+            ...( (currentUser?.role === 'employee' || currentUser?.role === 'Employee') ? [] : [{ label: 'Time Off Types', to: '/timeoff/types' }] )
           ]}
         />
-        <NavItem label="Payroll ▾" active={path.startsWith('/payroll') || path.startsWith('/salary')}
-          children={[
-            { label: 'Pay Runs',          to: '/payroll/runs' },
-            { label: 'Payslips',          to: '/payroll/payslips' },
-            { label: 'Salary Structures', to: '/salary/structures' },
-            { label: 'Salary Rules',      to: '/salary/rules' },
-          ]}
-        />
-        <NavItem label="Dashboard" to="/dashboard" active={path === '/dashboard'} />
-        {currentUser?.role === 'Admin' && (
+
+        {['hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) ? (
+          <NavItem label="Payroll ▾" active={path.startsWith('/payroll') || path.startsWith('/salary')}
+            children={[
+              { label: 'Pay Runs',          to: '/payroll/runs' },
+              { label: 'Payslips',          to: '/payroll/payslips' },
+              { label: 'Salary Structures', to: '/salary/structures' },
+              { label: 'Salary Rules',      to: '/salary/rules' },
+            ]}
+          />
+        ) : (
+          <NavItem label="My Payslips" to="/payroll/payslips" active={path.startsWith('/payroll/payslips')} />
+        )}
+
+        {['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) && (
+          <NavItem label="Dashboard" to="/dashboard" active={path === '/dashboard'} />
+        )}
+
+        {currentUser?.role === 'admin' && (
           <NavItem label="Users" to="/users" active={path === '/users'} />
         )}
       </nav>
@@ -159,12 +190,12 @@ export default function Topbar() {
         <AttendanceWidget />
         <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>
           {currentUser?.name}
-          <span style={{ marginLeft: 6, color: 'var(--gray-400)' }}>({currentUser?.role})</span>
+          <span style={{ marginLeft: 6, color: 'var(--gray-400)' }}>({roleLabel})</span>
         </div>
         <button className="avatar-btn" title={currentUser?.name}>
           {currentUser?.initials}
         </button>
-        <button className="btn-ghost btn btn-sm" onClick={logout} title="Logout">
+        <button className="btn-ghost btn btn-sm" onClick={handleLogout} title="Logout">
           <LogOut size={14} />
         </button>
       </div>

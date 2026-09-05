@@ -3,15 +3,24 @@ import { useApp } from '../../context/AppContext';
 
 export default function Login() {
   const { login } = useApp();
-  const [email, setEmail]     = useState('admin@company.com');
-  const [password, setPassword] = useState('admin123');
-  const [error, setError]     = useState('');
+  const [email, setEmail]       = useState('anish@peoplepay.dev');
+  const [password, setPassword] = useState('password123');
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const ok = login(email, password);
-    if (!ok) setError('Invalid email or password.');
-    else setError('');
+    setError('');
+    setLoading(true);
+
+    try {
+      await login(email, password);
+      // On success, AppContext sets currentUser → AppShell renders the app shell
+    } catch (err) {
+      setError(err.message || 'Invalid email or password.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,6 +39,7 @@ export default function Login() {
               onChange={e => setEmail(e.target.value)}
               placeholder="name@company.com"
               required
+              disabled={loading}
             />
           </div>
           <div className="form-group" style={{ marginBottom: 20 }}>
@@ -41,6 +51,7 @@ export default function Login() {
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              disabled={loading}
             />
           </div>
 
@@ -50,16 +61,23 @@ export default function Login() {
             </div>
           )}
 
-          <button className="btn btn-primary w-full" style={{ justifyContent: 'center', padding: '10px' }} type="submit">
-            Sign In
+          <button
+            className="btn btn-primary w-full"
+            style={{ justifyContent: 'center', padding: '10px' }}
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
         <div style={{ marginTop: 20, padding: 12, background: 'var(--gray-50)', borderRadius: 8, fontSize: 12, color: 'var(--gray-500)' }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Demo accounts:</div>
-          <div>admin@company.com / admin123</div>
-          <div>aarav@company.com / pass123</div>
-          <div>maya@company.com / pass123</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Demo accounts (password: password123):</div>
+          <div>anish@peoplepay.dev — Admin</div>
+          <div>priya@peoplepay.dev — HR Manager</div>
+          <div>rahul@peoplepay.dev — Employee</div>
+          <div>neha@peoplepay.dev — Employee (Part-time)</div>
+          <div>arjun@peoplepay.dev — Employee (Intern)</div>
         </div>
 
         <p style={{ marginTop: 16, textAlign: 'center', fontSize: 11, color: 'var(--gray-400)' }}>

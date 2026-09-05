@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp, useAuth } from '../../context/AppContext';
 
 export default function PayslipList() {
   const { payslips } = useApp();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
-  const filtered = payslips.filter(s =>
+  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
+  
+  // TODO: Backend should enforce this filtering.
+  const allowedPayslips = (isEmployeeOnly && currentUser?.employeeId)
+    ? payslips.filter(p => p.employeeId === currentUser.employeeId)
+    : payslips;
+
+  const filtered = allowedPayslips.filter(s =>
     s.employeeName.toLowerCase().includes(search.toLowerCase()) ||
     s.period.toLowerCase().includes(search.toLowerCase()) ||
     s.payrunName.toLowerCase().includes(search.toLowerCase())

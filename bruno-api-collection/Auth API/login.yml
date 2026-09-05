@@ -1,0 +1,29 @@
+info:
+  name: login
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://localhost:5001/api/auth/login
+  body:
+    type: json
+    data: |2
+          {
+            "email": "anish@peoplepay.dev",
+            "password": "password123"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    All demo credentials
+
+    • anish@peoplepay.dev / password123 → admin
+    • priya@peoplepay.dev / password123 → hr_manager
+    • rahul@peoplepay.dev / password123 → employee

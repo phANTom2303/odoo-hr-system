@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, LayoutGrid, List } from 'lucide-react';
 import { getEmployees } from '../../api/employees';
+import { useAuth } from '../../context/AppContext';
 
 const COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#7c3aed','#be185d','#0f766e','#c2410c'];
 
@@ -13,17 +14,25 @@ const initials = (e) => {
 
 export default function EmployeeList() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [view, setView]   = useState('kanban');
   const [search, setSearch] = useState('');
   const [dept, setDept]   = useState('');
   const [status, setStatus] = useState('');
+
+  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['employees', { search, dept, status }],
     queryFn: () => getEmployees({ search, department: dept, status }).then(r => r.data),
   });
 
-  const employees = data ?? [];
+  // TODO: The backend should filter this automatically for the Employee role.
+  const allEmployees = data ?? [];
+  const employees = (isEmployeeOnly && currentUser?.employeeId)
+    ? allEmployees.filter(e => e.id === currentUser.employeeId)
+    : allEmployees;
+
   const departments = [...new Set(employees.map(e => e.department_name).filter(Boolean))];
 
   if (isLoading) return <div className="page-header"><p>Loading employees…</p></div>;
@@ -38,9 +47,11 @@ export default function EmployeeList() {
             <button className={view === 'kanban' ? 'active' : ''} onClick={() => setView('kanban')}><LayoutGrid size={14} /></button>
             <button className={view === 'list'   ? 'active' : ''} onClick={() => setView('list')}><List size={14} /></button>
           </div>
-          <button className="btn btn-primary" onClick={() => navigate('/employees/new')}>
-            <Plus size={15} /> New
-          </button>
+          {!isEmployeeOnly && (
+            <button className="btn btn-primary" onClick={() => navigate('/employees/new')}>
+              <Plus size={15} /> New
+            </button>
+          )}
         </div>
       </div>
 

@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Check, X } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp, useAuth } from '../../context/AppContext';
 
 export default function TimeOffRequests() {
   const { timeOffRequests, approveRequest, refuseRequest } = useApp();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const empFilter = params.get('employee');
   const [search, setSearch] = useState('');
 
-  const filtered = timeOffRequests.filter(r => {
+  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
+
+  // TODO: The backend should ideally filter requests for the Employee role.
+  const allowedRequests = isEmployeeOnly && currentUser?.employeeId
+    ? timeOffRequests.filter(r => r.employeeId === currentUser.employeeId)
+    : timeOffRequests;
+
+  const filtered = allowedRequests.filter(r => {
     const matchEmp = empFilter ? r.employeeId === Number(empFilter) : true;
     const matchSearch = r.employeeName.toLowerCase().includes(search.toLowerCase()) ||
       r.typeName.toLowerCase().includes(search.toLowerCase());
@@ -41,7 +49,7 @@ export default function TimeOffRequests() {
           <Search size={14} color="var(--gray-400)" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests…" />
         </div>
-        <button className="btn btn-secondary btn-sm">My Team</button>
+        {!isEmployeeOnly && <button className="btn btn-secondary btn-sm">My Team</button>}
       </div>
 
       <div className="card">
@@ -68,7 +76,7 @@ export default function TimeOffRequests() {
                   <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.duration} Day{r.duration > 1 ? 's' : ''}</td>
                   <td><span className={`badge ${statusBadge(r.status)}`}>{r.status}</span></td>
                   <td>
-                    {r.status === 'To Approve' || r.status === 'Draft' ? (
+                    {!isEmployeeOnly && (r.status === 'To Approve' || r.status === 'Draft') ? (
                       <div className="d-flex gap-2">
                         <button className="btn btn-success btn-sm" onClick={() => approveRequest(r.id)}>
                           <Check size={12} /> Approve

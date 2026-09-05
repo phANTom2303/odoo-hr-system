@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { loginRequest, getMeRequest, logoutRequest } from '../api/auth';
 import {
   employees as empData,
   contracts as contractData,
@@ -17,7 +18,16 @@ import {
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
+  // ── Auth state ────────────────────────────────────────────────────────────
   const [currentUser, setCurrentUser] = useState(null);
+  /**
+   * authLoading is true while the app is bootstrapping (i.e., calling /me on mount).
+   * Prevents a flash of the Login screen before we know if a valid session exists.
+   */
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
+
+  // ── Other app state (kept for compatibility with existing pages) ──────────
   const [employees, setEmployees] = useState(empData);
   const [contracts, setContracts] = useState(contractData);
   const [schedules, setSchedules] = useState(scheduleData);
@@ -33,21 +43,49 @@ export function AppProvider({ children }) {
   const [checkedIn, setCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState(null);
 
-  const login = (email, password) => {
-    // simple mock auth
-    const demoUsers = [
-      { email: 'admin@company.com',  password: 'admin123',  name: 'Admin',       role: 'Admin',              initials: 'AD' },
-      { email: 'aarav@company.com',  password: 'pass123',   name: 'Aarav Mehta', role: 'HR Payroll User',    initials: 'AM' },
-      { email: 'maya@company.com',   password: 'pass123',   name: 'Maya Shah',   role: 'HR Manager',         initials: 'MS' },
-      { email: 'nisha@company.com',  password: 'pass123',   name: 'Nisha Rao',   role: 'HR Payroll Manager', initials: 'NR' },
-    ];
-    const found = demoUsers.find(u => u.email === email && u.password === password);
-    if (found) { setCurrentUser(found); return true; }
-    return false;
-  };
+  // ── Bootstrap: restore session from HttpOnly cookie on first load ─────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await getMeRequest();
+        if (result?.success && result.data) {
+          setCurrentUser(result.data);
+        }
+      } catch {
+        // No valid session — leave currentUser as null
+      } finally {
+        setAuthLoading(false);
+      }
+    })();
+  }, []);
 
-  const logout = () => setCurrentUser(null);
+  // ── Auth actions ──────────────────────────────────────────────────────────
 
+  /**
+   * Login with email/password. Calls the backend, which sets an HttpOnly JWT cookie.
+   * @param {string} email
+   * @param {string} password
+   * @throws {Error} with a user-facing message on failure
+   */
+  const login = useCallback(async (email, password) => {
+    setAuthError(null);
+    const result = await loginRequest(email, password); // throws on HTTP error
+    setCurrentUser(result.data);
+    return result.data;
+  }, []);
+
+  /**
+   * Logout — clears the JWT cookie server-side and resets local auth state.
+   */
+  const logout = useCallback(async () => {
+    try {
+      await logoutRequest();
+    } finally {
+      setCurrentUser(null);
+    }
+  }, []);
+
+  // ── Time-off helpers (unchanged) ──────────────────────────────────────────
   const approveRequest = (id) => {
     setTimeOffRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'Approved' } : r));
   };
@@ -60,21 +98,27 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      currentUser, login, logout,
-      employees, setEmployees,
-      contracts, setContracts,
-      schedules, setSchedules,
+      // Auth
+      currentUser,
+      authLoading,
+      authError,
+      login,
+      logout,
+      // HR data
+      employees,       setEmployees,
+      contracts,       setContracts,
+      schedules,       setSchedules,
       attendanceRecords, setAttendanceRecords,
-      timeOffTypes, setTimeOffTypes,
-      allocations, setAllocations,
+      timeOffTypes,    setTimeOffTypes,
+      allocations,     setAllocations,
       timeOffRequests, setTimeOffRequests,
       salaryStructures, setSalaryStructures,
-      salaryRules, setSalaryRules,
-      payruns, setPayruns,
-      payslips, setPayslips,
-      users, setUsers,
-      checkedIn, setCheckedIn,
-      checkInTime, setCheckInTime,
+      salaryRules,     setSalaryRules,
+      payruns,         setPayruns,
+      payslips,        setPayslips,
+      users,           setUsers,
+      checkedIn,       setCheckedIn,
+      checkInTime,     setCheckInTime,
       approveRequest, refuseRequest, approveAllocation,
     }}>
       {children}
@@ -83,3 +127,12 @@ export function AppProvider({ children }) {
 }
 
 export const useApp = () => useContext(AppContext);
+
+/**
+ * Convenience hook that returns only auth-related state and actions.
+ * Components that only need auth context can import this instead of useApp().
+ */
+export const useAuth = () => {
+  const { currentUser, authLoading, authError, login, logout } = useContext(AppContext);
+  return { currentUser, authLoading, authError, login, logout };
+};

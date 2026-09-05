@@ -1,0 +1,25 @@
+info:
+  name: get current user (me)
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: http://localhost:5001/api/auth/me
+  auth: inherit
+
+# Requires: a valid "token" HttpOnly cookie set by the login endpoint.
+# Bruno automatically sends cookies for the same origin after a successful login.
+#
+# On success:
+#   200 { success: true, data: { id, name, email, role, department, initials, ... } }
+#
+# On failure (no cookie / expired token):
+#   401 { message: "Authentication required. No token provided." }
+#   401 { message: "Token expired." }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
