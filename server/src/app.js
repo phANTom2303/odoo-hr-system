@@ -4,9 +4,9 @@ import cors from 'cors';
 import helmet from 'helmet'; // Standard security headers
 import { logger } from '#config/logger.js';
 import { RESPONSE_CODES } from '#lib/common.js';
-import { initRedis } from '#config/redis.js';
 import { AppError } from '#lib/errors.js';
 import taskRouter from '#routes/task.routes.js';
+import { initDatabase } from '#config/initDb.js';
 
 const app = express();
 
@@ -20,6 +20,7 @@ app.use(cors({
 app.use(express.json()); // Parse incoming JSON payloads
 
 // await initRedis();
+await initDatabase();
 
 // ── Route Mounts ────────────────────────────────────────────────────
 app.use('/api/tasks', taskRouter);
