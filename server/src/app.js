@@ -6,6 +6,7 @@ import { logger } from '#config/logger.js';
 import { RESPONSE_CODES } from '#lib/common.js';
 import { AppError } from '#lib/errors.js';
 import taskRouter from '#routes/task.routes.js';
+import contractRouter from '#routes/contract.routes.js';
 import { initDatabase } from '#config/initDb.js';
 
 const app = express();
@@ -24,6 +25,7 @@ await initDatabase();
 
 // ── Route Mounts ────────────────────────────────────────────────────
 app.use('/api/tasks', taskRouter);
+app.use('/api/contracts', contractRouter);
 
 // Global Error Handler (Good practice for a security platform)
 app.use((err, req, res, next) => {
