@@ -722,11 +722,11 @@ INSERT INTO overtime_policies (name, threshold_type, daily_threshold_hrs, weekly
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Users (5 employees)
 -- ─────────────────────────────────────────────────────────────────────────────
--- password_hash = bcrypt('password123')
+-- password_hash = bcrypt('password123', 10)
 INSERT INTO users (first_name, last_name, email, phone, password_hash, role, employment_status, employee_type, department_id, job_position_id, manager_id, date_of_joining, date_of_birth, bank_name, bank_account, address) VALUES
   -- 1: Admin / Engineering Manager (no manager — top-level)
   ('Anish',  'Goenka',   'anish@peoplepay.dev',   '+91-9876500001',
-   '$2b$10$EIXe0V5ZKjy9FJgZ0z7n3eK1Q5G4Z5g5z5g5z5g5z5g5z5g5z5g5z',
+   '$2b$10$y1rrCL1JNgQGfCwkAwy00uIQinUDxpKKN4.W6EwwqpcOTKWFmv32S',
    'admin', 'active', 'full_time',
    1, 5, NULL,
    '2024-01-15', '1995-06-20',
@@ -734,7 +734,7 @@ INSERT INTO users (first_name, last_name, email, phone, password_hash, role, emp
 
   -- 2: HR Manager (reports to Anish)
   ('Priya',  'Sharma',   'priya@peoplepay.dev',   '+91-9876500002',
-   '$2b$10$EIXe0V5ZKjy9FJgZ0z7n3eK1Q5G4Z5g5z5g5z5g5z5g5z5g5z5g5z',
+   '$2b$10$y1rrCL1JNgQGfCwkAwy00uIQinUDxpKKN4.W6EwwqpcOTKWFmv32S',
    'hr_manager', 'active', 'full_time',
    2, 2, 1,
    '2024-03-01', '1993-11-05',
@@ -742,7 +742,7 @@ INSERT INTO users (first_name, last_name, email, phone, password_hash, role, emp
 
   -- 3: Software Engineer (reports to Anish)
   ('Rahul',  'Verma',    'rahul@peoplepay.dev',   '+91-9876500003',
-   '$2b$10$EIXe0V5ZKjy9FJgZ0z7n3eK1Q5G4Z5g5z5g5z5g5z5g5z5g5z5g5z',
+   '$2b$10$y1rrCL1JNgQGfCwkAwy00uIQinUDxpKKN4.W6EwwqpcOTKWFmv32S',
    'employee', 'active', 'full_time',
    1, 1, 1,
    '2024-06-10', '1998-02-14',
@@ -750,7 +750,7 @@ INSERT INTO users (first_name, last_name, email, phone, password_hash, role, emp
 
   -- 4: Sales Executive (reports to Anish)
   ('Neha',   'Patel',    'neha@peoplepay.dev',    '+91-9876500004',
-   '$2b$10$EIXe0V5ZKjy9FJgZ0z7n3eK1Q5G4Z5g5z5g5z5g5z5g5z5g5z5g5z',
+   '$2b$10$y1rrCL1JNgQGfCwkAwy00uIQinUDxpKKN4.W6EwwqpcOTKWFmv32S',
    'employee', 'active', 'part_time',
    3, 3, 1,
    '2025-01-20', '1997-08-30',
@@ -758,7 +758,7 @@ INSERT INTO users (first_name, last_name, email, phone, password_hash, role, emp
 
   -- 5: Intern — Finance (reports to Priya)
   ('Arjun',  'Mehta',    'arjun@peoplepay.dev',   '+91-9876500005',
-   '$2b$10$EIXe0V5ZKjy9FJgZ0z7n3eK1Q5G4Z5g5z5g5z5g5z5g5z5g5z5g5z',
+   '$2b$10$y1rrCL1JNgQGfCwkAwy00uIQinUDxpKKN4.W6EwwqpcOTKWFmv32S',
    'employee', 'active', 'intern',
    4, 4, 2,
    '2026-07-01', '2003-04-18',

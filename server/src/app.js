@@ -2,12 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { logger } from '#config/logger.js';
 import { RESPONSE_CODES } from '#lib/common.js';
 import { AppError } from '#lib/errors.js';
 import { initDatabase } from '#config/initDb.js';
 
 // ── Routers ──────────────────────────────────────────────────────────
+import authRouter            from '#routes/auth.routes.js';
 import contractRouter        from '#routes/contract.routes.js';
 import departmentRouter      from '#routes/department.routes.js';
 import jobPositionRouter     from '#routes/jobPosition.routes.js';
@@ -22,18 +24,21 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({
+    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
+    credentials: true,  // Required for cookies to be sent cross-origin
 }));
 app.use(express.json());
+app.use(cookieParser()); // Parses req.cookies — required by requireAuth middleware
 
 await initDatabase();
 
 // ── Route Mounts ─────────────────────────────────────────────────────
+app.use('/api/auth',              authRouter);
 app.use('/api/contracts',         contractRouter);
-app.use('/api/departments',      departmentRouter);
-app.use('/api/job-positions',    jobPositionRouter);
+app.use('/api/departments',       departmentRouter);
+app.use('/api/job-positions',     jobPositionRouter);
 app.use('/api/employees',         employeeRouter);
 app.use('/api/schedules',         scheduleRouter);
 app.use('/api/time-off-types',    timeOffTypeRouter);

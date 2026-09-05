@@ -114,11 +114,27 @@ function AttendanceWidget() {
   );
 }
 
+/** Map DB enum roles to display labels */
+const ROLE_LABELS = {
+  admin:               'Admin',
+  hr_manager:          'HR Manager',
+  hr_payroll_user:     'HR Payroll User',
+  hr_payroll_manager:  'HR Payroll Manager',
+  employee:            'Employee',
+};
+
 export default function Topbar() {
   const { currentUser, logout } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
+
+  const handleLogout = async () => {
+    await logout();
+    // AppShell will re-render to show Login once currentUser is null
+  };
+
+  const roleLabel = ROLE_LABELS[currentUser?.role] ?? currentUser?.role ?? '';
 
   return (
     <div className="topbar">
@@ -150,7 +166,7 @@ export default function Topbar() {
           ]}
         />
         <NavItem label="Dashboard" to="/dashboard" active={path === '/dashboard'} />
-        {currentUser?.role === 'Admin' && (
+        {currentUser?.role === 'admin' && (
           <NavItem label="Users" to="/users" active={path === '/users'} />
         )}
       </nav>
@@ -159,12 +175,12 @@ export default function Topbar() {
         <AttendanceWidget />
         <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>
           {currentUser?.name}
-          <span style={{ marginLeft: 6, color: 'var(--gray-400)' }}>({currentUser?.role})</span>
+          <span style={{ marginLeft: 6, color: 'var(--gray-400)' }}>({roleLabel})</span>
         </div>
         <button className="avatar-btn" title={currentUser?.name}>
           {currentUser?.initials}
         </button>
-        <button className="btn-ghost btn btn-sm" onClick={logout} title="Logout">
+        <button className="btn-ghost btn btn-sm" onClick={handleLogout} title="Logout">
           <LogOut size={14} />
         </button>
       </div>

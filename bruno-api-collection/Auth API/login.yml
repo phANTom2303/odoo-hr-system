@@ -1,0 +1,34 @@
+info:
+  name: login
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://localhost:5001/api/auth/login
+  body:
+    type: json
+    data: |2
+          {
+            "email": "anish@peoplepay.dev",
+            "password": "password123"
+          }
+  auth: inherit
+
+# On success the server responds with:
+#   200 { success: true, data: { id, name, email, role, initials, ... } }
+# and sets an HttpOnly cookie named "token" that is used for all subsequent
+# authenticated requests.
+#
+# Demo credentials (all passwords are "password123"):
+#   anish@peoplepay.dev  — admin
+#   priya@peoplepay.dev  — hr_manager
+#   rahul@peoplepay.dev  — employee
+#   neha@peoplepay.dev   — employee (part-time)
+#   arjun@peoplepay.dev  — employee (intern)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

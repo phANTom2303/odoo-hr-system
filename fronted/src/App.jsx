@@ -42,7 +42,17 @@ import SalaryRuleForm       from './pages/payroll/SalaryRuleForm';
 import Dashboard from './pages/dashboard/Dashboard';
 
 function AppShell() {
-  const { currentUser } = useApp();
+  const { currentUser, authLoading } = useApp();
+
+  // While restoring session from cookie, show a neutral loading screen
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary, #4f46e5)' }}>PeoplePay360</div>
+        <div style={{ color: 'var(--gray-500, #6b7280)', fontSize: 14 }}>Loading…</div>
+      </div>
+    );
+  }
 
   if (!currentUser) return <Login />;
 

@@ -1,0 +1,25 @@
+info:
+  name: logout
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/auth/logout
+  auth: inherit
+
+# Clears the "token" HttpOnly cookie by setting it with an expired date (epoch 0).
+# No request body is required.
+#
+# On success:
+#   200 { success: true, message: "Logged out successfully." }
+#
+# Note: the JWT remains cryptographically valid until its natural expiry.
+# To fully invalidate the token before expiry, enable the Redis blacklist in
+# server/src/middlewares/auth.js (the commented-out block).
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
