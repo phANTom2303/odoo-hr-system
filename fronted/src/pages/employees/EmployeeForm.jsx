@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Clock, Calendar, Gift } from 'lucide-react';
 import {
-  getEmployeeById, createEmployee, updateEmployee,
+  getEmployeeById, createEmployee, updateEmployee, deleteEmployee,
   getEmployeeContracts, getEmployeeAttendance,
   getEmployeeTimeOff, getEmployeeAllocations,
 } from '../../api/employees';
@@ -54,6 +54,17 @@ export default function EmployeeForm() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['employees'] }); queryClient.invalidateQueries({ queryKey: ['employee', id] }); setEditing(false); },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteEmployee(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['employees'] }); navigate('/employees'); },
+  });
+
+  const handleDelete = () => {
+    if (window.confirm(`Are you sure you want to delete ${display.first_name} ${display.last_name}?`)) {
+      deleteMutation.mutate();
+    }
+  };
+
   const save = () => {
     if (isNew) {
       createMutation.mutate(form);
@@ -91,7 +102,34 @@ export default function EmployeeForm() {
           </div>
         </div>
         <div className="d-flex gap-2">
-          {!isNew && !editing && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
+          {!isNew && !editing && (
+            <>
+              <button className="btn btn-secondary" onClick={() => {
+              setForm({
+                first_name:        emp.first_name        ?? '',
+                last_name:         emp.last_name         ?? '',
+                email:             emp.email             ?? '',
+                phone:             emp.phone             ?? '',
+                password:          '',
+                role:              emp.role              ?? 'employee',
+                employment_status: emp.employment_status ?? 'active',
+                employee_type:     emp.employee_type     ?? 'full_time',
+                department_id:     emp.department_id     ?? null,
+                job_position_id:   emp.job_position_id   ?? null,
+                manager_id:        emp.manager_id        ?? null,
+                date_of_joining:   emp.date_of_joining   ? emp.date_of_joining.slice(0, 10) : '',
+                date_of_birth:     emp.date_of_birth     ? emp.date_of_birth.slice(0, 10)   : '',
+                bank_name:         emp.bank_name         ?? '',
+                bank_account:      emp.bank_account      ?? '',
+                address:           emp.address           ?? '',
+              });
+              setEditing(true);
+            }}>Edit</button>
+              <button className="btn btn-danger" onClick={handleDelete} disabled={deleteMutation.isPending}>
+                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </>
+          )}
           {(editing || isNew) && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/employees') : setEditing(false)}>Cancel</button>
@@ -137,7 +175,7 @@ export default function EmployeeForm() {
                 <div className="form-group" key={field}>
                   <label>{label}</label>
                   <input className="form-control" type={type}
-                    value={isNew ? form[field] : (editing ? form[field] ?? display[field] ?? '' : display[field] ?? '')}
+                    value={editing ? form[field] : display[field] ?? ''}
                     disabled={!editing && !isNew}
                     onChange={e => setField(field, e.target.value)} />
                 </div>
@@ -152,7 +190,7 @@ export default function EmployeeForm() {
               <div className="form-group">
                 <label>Role</label>
                 <select className="form-control"
-                  value={isNew ? form.role : (editing ? form.role ?? display.role : display.role ?? '')}
+                  value={editing ? form.role : display.role ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('role', e.target.value)}>
                   {['employee','hr_manager','hr_payroll_user','hr_payroll_manager','admin'].map(r => <option key={r} value={r}>{r}</option>)}
@@ -161,7 +199,7 @@ export default function EmployeeForm() {
               <div className="form-group">
                 <label>Employee Type</label>
                 <select className="form-control"
-                  value={isNew ? form.employee_type : (editing ? form.employee_type ?? display.employee_type : display.employee_type ?? '')}
+                  value={editing ? form.employee_type : display.employee_type ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('employee_type', e.target.value)}>
                   {['full_time','part_time','contract','intern'].map(t => <option key={t} value={t}>{t}</option>)}
@@ -170,7 +208,7 @@ export default function EmployeeForm() {
               <div className="form-group">
                 <label>Date of Joining</label>
                 <input className="form-control" type="date"
-                  value={isNew ? form.date_of_joining : (editing ? form.date_of_joining ?? display.date_of_joining?.slice(0,10) ?? '' : display.date_of_joining?.slice(0,10) ?? '')}
+                  value={editing ? form.date_of_joining : display.date_of_joining?.slice(0,10) ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('date_of_joining', e.target.value)} />
               </div>
@@ -181,28 +219,28 @@ export default function EmployeeForm() {
               <div className="form-group">
                 <label>Date of Birth</label>
                 <input className="form-control" type="date"
-                  value={isNew ? form.date_of_birth : (editing ? form.date_of_birth ?? display.date_of_birth?.slice(0,10) ?? '' : display.date_of_birth?.slice(0,10) ?? '')}
+                  value={editing ? form.date_of_birth : display.date_of_birth?.slice(0,10) ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('date_of_birth', e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Bank Name</label>
                 <input className="form-control"
-                  value={isNew ? form.bank_name : (editing ? form.bank_name ?? display.bank_name ?? '' : display.bank_name ?? '')}
+                  value={editing ? form.bank_name : display.bank_name ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('bank_name', e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Bank Account</label>
                 <input className="form-control"
-                  value={isNew ? form.bank_account : (editing ? form.bank_account ?? display.bank_account ?? '' : display.bank_account ?? '')}
+                  value={editing ? form.bank_account : display.bank_account ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('bank_account', e.target.value)} />
               </div>
               <div className="form-group span-2">
                 <label>Address</label>
                 <textarea className="form-control"
-                  value={isNew ? form.address : (editing ? form.address ?? display.address ?? '' : display.address ?? '')}
+                  value={editing ? form.address : display.address ?? ''}
                   disabled={!editing && !isNew}
                   onChange={e => setField('address', e.target.value)} />
               </div>

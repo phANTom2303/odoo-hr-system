@@ -17,7 +17,7 @@ export default function SalaryRuleForm() {
   const defaultStructureId = searchParams.get('structure') || '';
 
   const [editing, setEditing] = useState(isNew);
-  const EMPTY = { code: '', name: '', category: 'basic', sequence: 10, rule_type: 'fixed', fixed_amount: 0, percentage: null, base_rule_id: null, structure_id: defaultStructureId };
+  const EMPTY = { code: '', name: '', category: 'basic', sequence: '', rule_type: 'fixed', fixed_amount: '', percentage: null, base_rule_id: null, structure_id: defaultStructureId };
   const [form, setForm] = useState(EMPTY);
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -115,8 +115,8 @@ export default function SalaryRuleForm() {
             </div>
             <div className="form-group">
               <label>Sequence</label>
-              <input className="form-control" type="number" value={form.sequence} disabled={!editing}
-                onChange={e => setField('sequence', Number(e.target.value))} />
+              <input className="form-control no-spinner" type="number" value={form.sequence ?? ''} disabled={!editing}
+                onChange={e => setField('sequence', e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
             <div className="form-group">
               <label>Computation Type</label>
@@ -128,8 +128,8 @@ export default function SalaryRuleForm() {
             {form.rule_type === 'fixed' && (
               <div className="form-group">
                 <label>Fixed Amount (₹)</label>
-                <input className="form-control" type="number" value={form.fixed_amount ?? 0} disabled={!editing}
-                  onChange={e => setField('fixed_amount', Number(e.target.value))} />
+                <input className="form-control no-spinner" type="number" value={form.fixed_amount ?? ''} disabled={!editing}
+                  onChange={e => setField('fixed_amount', e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
             )}
             {form.rule_type === 'percentage' && (

@@ -11,20 +11,19 @@ export default function ContractList() {
     const [search, setSearch] = useState('');
 
     const { data: contracts = [], isLoading, isError, error } = useQuery({
-        queryKey: ['contracts'],
-        queryFn: getContracts,
+        queryKey: ['contracts', { empFilter }],
+        queryFn: () => getContracts(empFilter ? { employee_id: empFilter } : {}),
     });
 
     const searchTerm = search.toLowerCase();
-    let filtered = contracts.data || [];
-    if (searchTerm.length >= 3 && contracts.data) {
-        filtered = (contracts.data ?? []).filter(c => {
-            const matchEmp = empFilter ? c.employee_id === Number(empFilter) : true;
-            const matchSearch = c.employee_name?.toLowerCase().includes(searchTerm) ||
+    const allContracts = contracts.data ?? [];
+    const filtered = allContracts.filter(c => {
+        if (searchTerm.length >= 1) {
+            return c.employee_name?.toLowerCase().includes(searchTerm) ||
                 String(c.id).includes(searchTerm);
-            return matchEmp && matchSearch;
-        });
-    }
+        }
+        return true;
+    });
 
     const statusBadge = (s) => {
         if (s === 'Running') return 'badge-green';

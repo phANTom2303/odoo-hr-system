@@ -5,12 +5,12 @@ info:
 
 http:
   method: PUT
-  url: http://localhost:5001/api/schedules/1
+  url: http://localhost:5001/api/schedules/3
   body:
     type: json
     data: |2
           {
-            "name": "Standard 40 hours Updated",
+            "name": "Standard 70 hours Updated",
             "is_active": true,
             "lines": []
           }
@@ -21,3 +21,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

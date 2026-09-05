@@ -10,7 +10,7 @@ http:
     type: json
     data: |2
           {
-            "name": "Standard 40 hours",
+            "name": "Standard 90 hours",
             "lines": []
           }
   auth: inherit
@@ -20,3 +20,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

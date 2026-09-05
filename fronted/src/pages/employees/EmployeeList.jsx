@@ -70,8 +70,8 @@ export default function EmployeeList() {
               <h3>{emp.first_name} {emp.last_name}</h3>
               <p>{emp.job_position_title} • {emp.department_name}</p>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className={`badge ${emp.is_active ? 'badge-green' : 'badge-gray'}`}>
-                  {emp.is_active ? 'Active' : 'Inactive'}
+                <span className={`badge ${emp.employment_status === 'active' ? 'badge-green' : 'badge-gray'}`}>
+                  {emp.employment_status === 'active' ? 'Active' : 'Inactive'}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>{emp.email}</span>
               </div>
@@ -105,7 +105,7 @@ export default function EmployeeList() {
                     <td className="text-muted">{emp.email}</td>
                     <td>{emp.job_position_title}</td>
                     <td>{emp.department_name}</td>
-                    <td><span className={`badge ${emp.is_active ? 'badge-green' : 'badge-gray'}`}>{emp.is_active ? 'Active' : 'Inactive'}</span></td>
+                    <td><span className={`badge ${emp.employment_status === 'active' ? 'badge-green' : 'badge-gray'}`}>{emp.employment_status === 'active' ? 'Active' : 'Inactive'}</span></td>
                   </tr>
                 ))}
               </tbody>
