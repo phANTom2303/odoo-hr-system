@@ -1,19 +1,25 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useQuery } from '@tanstack/react-query';
+import { getContracts } from '../../api/contracts';
 
 export default function ContractList() {
-  const { contracts } = useApp();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const empFilter = params.get('employee');
   const [search, setSearch] = useState('');
 
-  const filtered = contracts.filter(c => {
-    const matchEmp = empFilter ? c.employeeId === Number(empFilter) : true;
-    const matchSearch = c.employeeName.toLowerCase().includes(search.toLowerCase()) ||
-      c.ref.toLowerCase().includes(search.toLowerCase());
+  const { data: contracts = [], isLoading, isError, error } = useQuery({
+    queryKey: ['contracts'],
+    queryFn: getContracts,
+  });
+
+  const filtered = (contracts.data ?? []).filter(c => {
+    const matchEmp = empFilter ? c.employee_id === Number(empFilter) : true;
+    const searchTerm = search.toLowerCase();
+    const matchSearch = c.employee_name?.toLowerCase().includes(searchTerm) ||
+      String(c.id).includes(searchTerm);
     return matchEmp && matchSearch;
   });
 
@@ -22,6 +28,9 @@ export default function ContractList() {
     if (s === 'Expired') return 'badge-gray';
     return 'badge-yellow';
   };
+
+  if (isLoading) return <div style={{ padding: 20 }}>Loading contracts...</div>;
+  if (isError) return <div style={{ padding: 20, color: 'red' }}>Error loading contracts: {error.message}</div>;
 
   return (
     <div>
@@ -58,11 +67,11 @@ export default function ContractList() {
             <tbody>
               {filtered.map(c => (
                 <tr key={c.id} onClick={() => navigate(`/contracts/${c.id}`)}>
-                  <td className="font-mono" style={{ fontWeight: 500 }}>{c.ref}</td>
-                  <td>{c.employeeName}</td>
-                  <td>{c.startDate}</td>
-                  <td>{c.endDate || '—'}</td>
-                  <td>₹ {c.wage.toLocaleString('en-IN')}</td>
+                  <td className="font-mono" style={{ fontWeight: 500 }}>#{c.id}</td>
+                  <td>{c.employee_name}</td>
+                  <td>{c.start_date?.slice(0, 10)}</td>
+                  <td>{c.end_date?.slice(0, 10) || '—'}</td>
+                  <td>—</td>
                   <td><span className={`badge ${statusBadge(c.status)}`}>{c.status}</span></td>
                 </tr>
               ))}

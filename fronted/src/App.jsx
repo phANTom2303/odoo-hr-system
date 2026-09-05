@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppProvider, useApp } from './context/AppContext';
 import Topbar from './components/Topbar';
-
 // Auth
 import Login from './pages/auth/Login';
 import UserManagement from './pages/auth/UserManagement';
@@ -99,12 +99,23 @@ function AppShell() {
   );
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppProvider>
-        <AppShell />
-      </AppProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AppProvider>
+          <AppShell />
+        </AppProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
