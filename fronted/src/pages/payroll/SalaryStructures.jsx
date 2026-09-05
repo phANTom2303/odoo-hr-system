@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { getSalaryStructures } from '../../api/salary';
 
 export default function SalaryStructures() {
-  const { salaryStructures } = useApp();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
-  const filtered = salaryStructures.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['salary-structures'],
+    queryFn: () => getSalaryStructures().then(r => r.data),
+  });
+
+  const structures = (data ?? []).filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (isLoading) return <div className="page-header"><p>Loading…</p></div>;
+  if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load salary structures.</p></div>;
 
   return (
     <div>
@@ -33,20 +41,15 @@ export default function SalaryStructures() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>Structure Name</th>
-                <th>No. of Rules</th>
-                <th>Employees</th>
-                <th>Status</th>
-              </tr>
+              <tr><th>Structure Name</th><th>Rules</th><th>Active Employees</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {filtered.map(s => (
+              {structures.map(s => (
                 <tr key={s.id} onClick={() => navigate(`/salary/structures/${s.id}`)}>
                   <td style={{ fontWeight: 500 }}>{s.name}</td>
-                  <td>{s.rules}</td>
-                  <td>{s.employees}</td>
-                  <td><span className={`badge ${s.status === 'Active' ? 'badge-green' : 'badge-gray'}`}>{s.status}</span></td>
+                  <td>{s.rule_count}</td>
+                  <td>{s.employee_count}</td>
+                  <td><span className={`badge ${s.status === 'active' ? 'badge-green' : 'badge-gray'}`}>{s.status}</span></td>
                 </tr>
               ))}
             </tbody>

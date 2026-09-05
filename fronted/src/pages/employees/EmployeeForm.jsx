@@ -1,82 +1,107 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Clock, Calendar, Gift } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import {
+  getEmployeeById, createEmployee, updateEmployee,
+  getEmployeeContracts, getEmployeeAttendance,
+  getEmployeeTimeOff, getEmployeeAllocations,
+} from '../../api/employees';
 
 const COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#7c3aed','#be185d','#0f766e','#c2410c'];
 
 export default function EmployeeForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { employees, setEmployees, contracts, attendanceRecords, timeOffRequests, allocations, schedules } = useApp();
-
+  const queryClient = useQueryClient();
   const isNew = id === 'new';
-  const existing = isNew ? null : employees.find(e => e.id === Number(id));
 
-  const [form, setForm] = useState(existing || {
-    name: '', email: '', phone: '', jobTitle: '', department: '',
-    manager: '', schedule: '', company: 'OXP Pvt Ltd', status: 'Active',
-    initials: '', color: COLORS[0],
-  });
-  const [tab, setTab] = useState('work');
+  const [tab, setTab]       = useState('work');
   const [editing, setEditing] = useState(isNew);
 
-  const empContracts   = contracts.filter(c => c.employeeId === Number(id));
-  const empAttendance  = attendanceRecords.filter(a => a.employeeId === Number(id));
-  const empTimeOff     = timeOffRequests.filter(r => r.employeeId === Number(id));
-  const empAllocations = allocations.filter(a => a.employeeId === Number(id));
+  const { data: emp, isLoading } = useQuery({
+    queryKey: ['employee', id],
+    queryFn: () => getEmployeeById(id).then(r => r.data),
+    enabled: !isNew,
+  });
 
+  const { data: empContracts   = [] } = useQuery({ queryKey: ['emp-contracts',   id], queryFn: () => getEmployeeContracts(id).then(r => r.data),   enabled: !isNew });
+  const { data: empAttendance  = [] } = useQuery({ queryKey: ['emp-attendance',  id], queryFn: () => getEmployeeAttendance(id).then(r => r.data),  enabled: !isNew });
+  const { data: empTimeOff     = [] } = useQuery({ queryKey: ['emp-timeoff',     id], queryFn: () => getEmployeeTimeOff(id).then(r => r.data),     enabled: !isNew });
+  const { data: empAllocations = [] } = useQuery({ queryKey: ['emp-allocations', id], queryFn: () => getEmployeeAllocations(id).then(r => r.data), enabled: !isNew });
+
+  const EMPTY = {
+    first_name: '', last_name: '', email: '', phone: '', password: '',
+    role: 'employee', employment_status: 'active', employee_type: 'full_time',
+    department_id: null, job_position_id: null, manager_id: null,
+    date_of_joining: '', date_of_birth: '',
+    bank_name: '', bank_account: '', address: '',
+  };
+
+  const [form, setForm] = useState(EMPTY);
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Populate form once data loads
+  const formData = isNew ? form : (emp ? { ...emp, password: '' } : form);
+
+  const createMutation = useMutation({
+    mutationFn: createEmployee,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['employees'] }); navigate('/employees'); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateEmployee,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['employees'] }); queryClient.invalidateQueries({ queryKey: ['employee', id] }); setEditing(false); },
+  });
 
   const save = () => {
     if (isNew) {
-      const words = form.name.trim().split(' ');
-      const initials = words.length >= 2 ? words[0][0] + words[1][0] : words[0]?.slice(0, 2) || 'EM';
-      const newEmp = { ...form, id: Date.now(), initials: initials.toUpperCase(), contracts: 0, timeOff: 0, attendance: 0 };
-      setEmployees(prev => [...prev, newEmp]);
-      navigate('/employees');
+      createMutation.mutate(form);
     } else {
-      setEmployees(prev => prev.map(e => e.id === Number(id) ? { ...e, ...form } : e));
-      setEditing(false);
+      const { password, ...rest } = form;
+      updateMutation.mutate({ id: Number(id), ...(password ? { password } : {}), ...rest });
     }
   };
 
-  if (!isNew && !existing) return <div className="main-content"><p>Employee not found.</p></div>;
+  const isPending = createMutation.isPending || updateMutation.isPending;
+  const error     = createMutation.error?.message || updateMutation.error?.message;
 
-  const emp = form;
-  const avatarColor = emp.color || COLORS[(Number(id) || 0) % COLORS.length];
+  if (!isNew && isLoading) return <div><p>Loading…</p></div>;
+
+  const display = isNew ? form : (emp ?? form);
+  const avatarColor = COLORS[(Number(id) || 0) % COLORS.length];
 
   return (
     <div>
       <div className="page-breadcrumb" style={{ marginBottom: 8 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/employees')} style={{ marginRight: 8 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/employees')}>
           <ArrowLeft size={14} /> Employees
         </button>
-        <span>/ {isNew ? 'New Employee' : emp.name}</span>
+        <span>/ {isNew ? 'New Employee' : `${display.first_name} ${display.last_name}`}</span>
       </div>
 
       <div className="page-header">
         <div className="d-flex gap-2" style={{ alignItems: 'center' }}>
           <div style={{ width: 48, height: 48, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 700 }}>
-            {(emp.initials || emp.name?.slice(0, 2) || 'EM').toUpperCase()}
+            {[display.first_name?.[0], display.last_name?.[0]].filter(Boolean).join('').toUpperCase() || 'EM'}
           </div>
           <div>
-            <h1 style={{ marginBottom: 2 }}>{isNew ? 'New Employee' : emp.name}</h1>
-            <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>{emp.jobTitle} {emp.department ? `• ${emp.department}` : ''}</div>
+            <h1 style={{ marginBottom: 2 }}>{isNew ? 'New Employee' : `${display.first_name} ${display.last_name}`}</h1>
+            <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>{display.job_position_title} {display.department_name ? `• ${display.department_name}` : ''}</div>
           </div>
         </div>
         <div className="d-flex gap-2">
-          {!isNew && !editing && (
-            <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>
-          )}
+          {!isNew && !editing && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
           {(editing || isNew) && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/employees') : setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>Save</button>
+              <button className="btn btn-primary" onClick={save} disabled={isPending}>{isPending ? 'Saving…' : 'Save'}</button>
             </>
           )}
         </div>
       </div>
+
+      {error && <div className="alert alert-danger" style={{ marginBottom: 12 }}>{error}</div>}
 
       {!isNew && (
         <div className="smart-btns">
@@ -103,79 +128,83 @@ export default function EmployeeForm() {
         <div className="card-body">
           {tab === 'work' && (
             <div className="form-grid">
+              {[
+                { label: 'First Name *', field: 'first_name', type: 'text' },
+                { label: 'Last Name *',  field: 'last_name',  type: 'text' },
+                { label: 'Work Email *', field: 'email',      type: 'email' },
+                { label: 'Phone',        field: 'phone',      type: 'text' },
+              ].map(({ label, field, type }) => (
+                <div className="form-group" key={field}>
+                  <label>{label}</label>
+                  <input className="form-control" type={type}
+                    value={isNew ? form[field] : (editing ? form[field] ?? display[field] ?? '' : display[field] ?? '')}
+                    disabled={!editing && !isNew}
+                    onChange={e => setField(field, e.target.value)} />
+                </div>
+              ))}
+              {isNew && (
+                <div className="form-group">
+                  <label>Password *</label>
+                  <input className="form-control" type="password" value={form.password}
+                    onChange={e => setField('password', e.target.value)} />
+                </div>
+              )}
               <div className="form-group">
-                <label>Full Name <span className="req">*</span></label>
-                <input className="form-control" value={emp.name} disabled={!editing} onChange={e => setField('name', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Job Position</label>
-                <input className="form-control" value={emp.jobTitle} disabled={!editing} onChange={e => setField('jobTitle', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Department</label>
-                <select className="form-control" value={emp.department} disabled={!editing} onChange={e => setField('department', e.target.value)}>
-                  {['Finance','HR','Engineering','Sales','IT','Support'].map(d => <option key={d}>{d}</option>)}
+                <label>Role</label>
+                <select className="form-control"
+                  value={isNew ? form.role : (editing ? form.role ?? display.role : display.role ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('role', e.target.value)}>
+                  {['employee','hr_manager','hr_payroll_user','hr_payroll_manager','admin'].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label>Manager</label>
-                <input className="form-control" value={emp.manager} disabled={!editing} onChange={e => setField('manager', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Working Schedule</label>
-                <select className="form-control" value={emp.schedule} disabled={!editing} onChange={e => setField('schedule', e.target.value)}>
-                  <option value="">— Select —</option>
-                  {schedules.map(s => <option key={s.id}>{s.name}</option>)}
+                <label>Employee Type</label>
+                <select className="form-control"
+                  value={isNew ? form.employee_type : (editing ? form.employee_type ?? display.employee_type : display.employee_type ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('employee_type', e.target.value)}>
+                  {['full_time','part_time','contract','intern'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label>Work Location</label>
-                <input className="form-control" defaultValue="Mumbai" disabled={!editing} />
-              </div>
-              <div className="form-group">
-                <label>Company</label>
-                <input className="form-control" value={emp.company} disabled={!editing} onChange={e => setField('company', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Work Email</label>
-                <input className="form-control" value={emp.email} disabled={!editing} onChange={e => setField('email', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Status</label>
-                <select className="form-control" value={emp.status} disabled={!editing} onChange={e => setField('status', e.target.value)}>
-                  <option>Active</option>
-                  <option>Inactive</option>
-                </select>
+                <label>Date of Joining</label>
+                <input className="form-control" type="date"
+                  value={isNew ? form.date_of_joining : (editing ? form.date_of_joining ?? display.date_of_joining?.slice(0,10) ?? '' : display.date_of_joining?.slice(0,10) ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('date_of_joining', e.target.value)} />
               </div>
             </div>
           )}
           {tab === 'private' && (
             <div className="form-grid">
               <div className="form-group">
-                <label>Phone</label>
-                <input className="form-control" value={emp.phone} disabled={!editing} onChange={e => setField('phone', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Personal Email</label>
-                <input className="form-control" type="email" disabled={!editing} defaultValue="" />
-              </div>
-              <div className="form-group">
                 <label>Date of Birth</label>
-                <input className="form-control" type="date" disabled={!editing} />
+                <input className="form-control" type="date"
+                  value={isNew ? form.date_of_birth : (editing ? form.date_of_birth ?? display.date_of_birth?.slice(0,10) ?? '' : display.date_of_birth?.slice(0,10) ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('date_of_birth', e.target.value)} />
               </div>
               <div className="form-group">
-                <label>Gender</label>
-                <select className="form-control" disabled={!editing}>
-                  <option>Male</option><option>Female</option><option>Other</option>
-                </select>
+                <label>Bank Name</label>
+                <input className="form-control"
+                  value={isNew ? form.bank_name : (editing ? form.bank_name ?? display.bank_name ?? '' : display.bank_name ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('bank_name', e.target.value)} />
               </div>
               <div className="form-group">
-                <label>Bank Account Number</label>
-                <input className="form-control" disabled={!editing} placeholder="Enter bank account" />
+                <label>Bank Account</label>
+                <input className="form-control"
+                  value={isNew ? form.bank_account : (editing ? form.bank_account ?? display.bank_account ?? '' : display.bank_account ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('bank_account', e.target.value)} />
               </div>
-              <div className="form-group">
-                <label>PAN Number</label>
-                <input className="form-control" disabled={!editing} placeholder="ABCDE1234F" />
+              <div className="form-group span-2">
+                <label>Address</label>
+                <textarea className="form-control"
+                  value={isNew ? form.address : (editing ? form.address ?? display.address ?? '' : display.address ?? '')}
+                  disabled={!editing && !isNew}
+                  onChange={e => setField('address', e.target.value)} />
               </div>
             </div>
           )}
