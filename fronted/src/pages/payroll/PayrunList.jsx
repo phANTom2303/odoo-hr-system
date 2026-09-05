@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPayRuns, getEligibleEmployees, createPayRun, n } from '../../api/payroll';
-import { getSalaryStructures } from '../../api/salary';
 import { useAuth } from '../../context/AppContext';
 
 const CAN_MANAGE_RUNS = ['hr_payroll_user', 'hr_payroll_manager', 'admin'];
@@ -71,7 +70,6 @@ export default function PayrunList() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Salary Structure</th>
                 <th>Period</th>
                 <th>Employees</th>
                 <th>Total Net</th>
@@ -82,7 +80,6 @@ export default function PayrunList() {
               {filtered.map(p => (
                 <tr key={p.id} onClick={() => navigate(`/payroll/runs/${p.id}`)}>
                   <td className="font-mono" style={{ fontWeight: 600 }}>{p.name}</td>
-                  <td>{p.structure_name}</td>
                   <td>{p.start_date} → {p.end_date}</td>
                   <td>{p.employee_count}</td>
                   <td>₹ {n(p.total_net).toLocaleString('en-IN')}</td>
@@ -103,17 +100,10 @@ function PayrunWizard({ onClose }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
-  const [structureId, setStructureId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [selected, setSelected] = useState([]);
-
-  const { data: structuresData, isLoading: structuresLoading } = useQuery({
-    queryKey: ['salary-structures'],
-    queryFn: () => getSalaryStructures().then(r => r.data),
-  });
-  const activeStructures = (structuresData ?? []).filter(s => s.status === 'active');
 
   const { data: eligibleData, isLoading: eligibleLoading, isError: eligibleError } = useQuery({
     queryKey: ['eligible-employees', { startDate, endDate }],
@@ -138,11 +128,10 @@ function PayrunWizard({ onClose }) {
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   );
 
-  const canContinue = !!structureId && !!startDate && !!endDate && endDate >= startDate;
+  const canContinue = !!startDate && !!endDate && endDate >= startDate;
 
   const mutation = useMutation({
     mutationFn: () => createPayRun({
-      salary_structure_id: Number(structureId),
       start_date: startDate,
       end_date: endDate,
       employee_ids: selected,
@@ -166,7 +155,7 @@ function PayrunWizard({ onClose }) {
         </div>
         <div className="modal-body">
           <div className="wizard-steps" style={{ marginBottom: 24 }}>
-            {['Scope & Period', 'Select Employees'].map((label, i) => (
+            {['Period', 'Select Employees'].map((label, i) => (
               <div key={i} className={`wizard-step ${step === i + 1 ? 'active' : step > i + 1 ? 'done' : ''}`}>
                 <div className="wizard-step-dot">{step > i + 1 ? '✓' : i + 1}</div>
                 <div className="wizard-step-label">{label}</div>
@@ -176,18 +165,6 @@ function PayrunWizard({ onClose }) {
 
           {step === 1 && (
             <div className="form-grid cols-1" style={{ gap: 14 }}>
-              <div className="form-group">
-                <label>Salary Structure <span className="req">*</span></label>
-                <select
-                  className="form-control"
-                  value={structureId}
-                  onChange={e => setStructureId(e.target.value)}
-                  disabled={structuresLoading}
-                >
-                  <option value="">Select a structure…</option>
-                  {activeStructures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
               <div className="form-group">
                 <label>Start Date <span className="req">*</span></label>
                 <input

@@ -532,12 +532,16 @@ For attendance record on date D for employee E:
 
 **Step 1 — Define Scope:**
 ```
-Input: salary_structure_id, start_date, end_date
+Input: start_date, end_date
 Validation:
   - end_date >= start_date
-  - salary_structure must be active
-  - No existing pay run with the exact same structure + period (warn, don't block)
+  - No existing pay run with the exact same period (warn, don't block)
 ```
+
+> A pay run has no `salary_structure_id` of its own — each employee's structure comes from
+> their contract (`contracts.salary_structure_id`) and is resolved per contract segment at
+> compute time (see §13, step 4). This lets one pay run correctly pay employees on different
+> salary structures.
 
 **Step 2 — Select Employees:**
 ```
@@ -552,7 +556,7 @@ Manager selects specific employees from this list.
 
 **On "Create Payrun" click:**
 ```
-1. INSERT into pay_runs (name, salary_structure_id, start_date, end_date, status='draft', created_by)
+1. INSERT into pay_runs (name, start_date, end_date, status='draft', created_by)
 2. INSERT into pay_run_employees for each selected employee
 3. Return the new pay_run record (do NOT compute payslips yet)
 ```

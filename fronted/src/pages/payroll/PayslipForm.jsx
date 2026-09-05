@@ -109,7 +109,7 @@ export default function PayslipForm() {
           <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center' }}>
             <span className={`badge ${statusBadge(slip.status)}`}>{slip.status}</span>
             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>
-              {slip.start_date} – {slip.end_date} • {slip.structure_name}
+              {slip.start_date} – {slip.end_date}{slip.structure_name ? ` • ${slip.structure_name}` : ''}
             </span>
           </div>
         </div>
@@ -158,7 +158,7 @@ export default function PayslipForm() {
             </div>
             <div className="form-group">
               <label>Salary Structure</label>
-              <input className="form-control" value={slip.structure_name} disabled />
+              <input className="form-control" value={slip.structure_name || '—'} disabled />
             </div>
             <div className="form-group">
               <label>Period</label>

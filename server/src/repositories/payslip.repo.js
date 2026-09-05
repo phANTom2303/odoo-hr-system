@@ -162,7 +162,8 @@ export const findAll = async ({ pay_run_id, employee_id, status } = {}) => {
         FROM payslips ps
         JOIN users u ON u.id = ps.employee_id
         JOIN pay_runs pr ON pr.id = ps.pay_run_id
-        JOIN salary_structures ss ON ss.id = pr.salary_structure_id
+        LEFT JOIN contracts c ON c.id = ps.contract_id
+        LEFT JOIN salary_structures ss ON ss.id = c.salary_structure_id
         ${where}
         ORDER BY ps.created_at DESC;
     `;
@@ -188,7 +189,8 @@ export const findById = async (id) => {
         FROM payslips ps
         JOIN users u ON u.id = ps.employee_id
         JOIN pay_runs pr ON pr.id = ps.pay_run_id
-        JOIN salary_structures ss ON ss.id = pr.salary_structure_id
+        LEFT JOIN contracts c ON c.id = ps.contract_id
+        LEFT JOIN salary_structures ss ON ss.id = c.salary_structure_id
         LEFT JOIN departments d ON d.id = u.department_id
         LEFT JOIN job_positions jp ON jp.id = u.job_position_id
         WHERE ps.id = $1;

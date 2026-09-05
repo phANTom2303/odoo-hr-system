@@ -136,7 +136,7 @@ export default function PayrunForm() {
           <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <span className={`badge ${STATUS_BADGE[status] || 'badge-gray'}`}>{status}</span>
             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>
-              {run.start_date} – {run.end_date} • {run.structure_name} • {run.employee_count} employee(s)
+              {run.start_date} – {run.end_date} • {run.employee_count} employee(s)
             </span>
           </div>
         </div>

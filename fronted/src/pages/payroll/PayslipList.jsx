@@ -85,7 +85,7 @@ export default function PayslipList() {
                 {filtered.map(s => (
                   <tr key={s.id} onClick={() => navigate(`/payroll/payslips/${s.id}`)}>
                     <td style={{ fontWeight: 500 }}>{s.employee_name}</td>
-                    <td>{s.structure_name}</td>
+                    <td>{s.structure_name || '—'}</td>
                     <td className="font-mono">{s.pay_run_name}</td>
                     <td>{s.start_date} – {s.end_date}</td>
                     <td>{n(s.worked_days)}</td>

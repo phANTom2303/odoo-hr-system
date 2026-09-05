@@ -16,7 +16,6 @@ import { query, transaction } from '#config/db.js';
 const PAY_RUN_COLUMNS = `
     pr.id,
     pr.name,
-    pr.salary_structure_id,
     pr.start_date::text AS start_date,
     pr.end_date::text AS end_date,
     pr.status,
@@ -28,7 +27,7 @@ const PAY_RUN_COLUMNS = `
 `;
 
 /**
- * Fetch all pay runs with structure name, creator name, and derived totals.
+ * Fetch all pay runs with creator name and derived totals.
  * @param {object} [filters]
  * @param {string} [filters.status]
  * @param {string} [filters.start_date] - ISO date; keeps runs ending on/after this date.
@@ -57,12 +56,10 @@ export const findAll = async ({ status, start_date, end_date } = {}) => {
     const sql = `
         SELECT
             ${PAY_RUN_COLUMNS},
-            ss.name AS structure_name,
             u.first_name || ' ' || u.last_name AS created_by_name,
             (SELECT COUNT(*) FROM pay_run_employees pre WHERE pre.pay_run_id = pr.id)::int AS employee_count,
             (SELECT COALESCE(SUM(ps.net_salary), 0) FROM payslips ps WHERE ps.pay_run_id = pr.id)::float8 AS total_net
         FROM pay_runs pr
-        JOIN salary_structures ss ON ss.id = pr.salary_structure_id
         JOIN users u ON u.id = pr.created_by
         ${where}
         ORDER BY pr.start_date DESC;
@@ -80,13 +77,10 @@ export const findById = async (id) => {
     const sql = `
         SELECT
             ${PAY_RUN_COLUMNS},
-            ss.id AS structure_id,
-            ss.name AS structure_name,
             u.first_name || ' ' || u.last_name AS created_by_name,
             (SELECT COUNT(*) FROM pay_run_employees pre WHERE pre.pay_run_id = pr.id)::int AS employee_count,
             (SELECT COALESCE(SUM(ps.net_salary), 0) FROM payslips ps WHERE ps.pay_run_id = pr.id)::float8 AS total_net
         FROM pay_runs pr
-        JOIN salary_structures ss ON ss.id = pr.salary_structure_id
         JOIN users u ON u.id = pr.created_by
         WHERE pr.id = $1;
     `;
@@ -105,7 +99,6 @@ export const findByIdRaw = async (id) => {
         SELECT
             id,
             name,
-            salary_structure_id,
             start_date::text AS start_date,
             end_date::text AS end_date,
             status,
@@ -152,7 +145,6 @@ export const findPayslipSummaries = async (payRunId) => {
  * Create a pay run and bulk-attach its selected employees in one transaction.
  * @param {object} data
  * @param {string} data.name
- * @param {number} data.salary_structure_id
  * @param {string} data.start_date
  * @param {string} data.end_date
  * @param {number} data.created_by
@@ -161,7 +153,6 @@ export const findPayslipSummaries = async (payRunId) => {
  */
 export const create = async ({
     name,
-    salary_structure_id,
     start_date,
     end_date,
     created_by,
@@ -169,13 +160,13 @@ export const create = async ({
 }) => {
     return transaction(async (client) => {
         const { rows: [payRun] } = await client.query(
-            `INSERT INTO pay_runs (name, salary_structure_id, start_date, end_date, created_by)
-             VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO pay_runs (name, start_date, end_date, created_by)
+             VALUES ($1, $2, $3, $4)
              RETURNING
-                id, name, salary_structure_id,
+                id, name,
                 start_date::text AS start_date, end_date::text AS end_date,
                 status, created_by, validated_at, paid_at, created_at, updated_at;`,
-            [name, salary_structure_id, start_date, end_date, created_by]
+            [name, start_date, end_date, created_by]
         );
 
         if (employee_ids.length > 0) {
@@ -222,7 +213,7 @@ export const updateStatus = async (id, status, { validated_at = null, paid_at = 
             updated_at   = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING
-            id, name, salary_structure_id,
+            id, name,
             start_date::text AS start_date, end_date::text AS end_date,
             status, created_by, validated_at, paid_at, created_at, updated_at;
     `;
@@ -244,7 +235,7 @@ export const updateMeta = async (id, { name }) => {
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING
-            id, name, salary_structure_id,
+            id, name,
             start_date::text AS start_date, end_date::text AS end_date,
             status, created_by, validated_at, paid_at, created_at, updated_at;
     `;

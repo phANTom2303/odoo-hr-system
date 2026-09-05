@@ -21,15 +21,15 @@ export const getAll = asyncHandler(async (req, res) => {
 /**
  * POST /api/pay-runs
  * Creates a new pay run.
- * Required body: salary_structure_id, start_date, end_date, employee_ids.
+ * Required body: start_date, end_date, employee_ids.
  * Optional body: name.
  */
 export const create = asyncHandler(async (req, res) => {
-    const { name, salary_structure_id, start_date, end_date, employee_ids } = req.body;
+    const { name, start_date, end_date, employee_ids } = req.body;
     const createdBy = req.user.sub;
 
     const payRun = await payRunService.create(
-        { name, salary_structure_id, start_date, end_date, employee_ids },
+        { name, start_date, end_date, employee_ids },
         createdBy,
     );
 

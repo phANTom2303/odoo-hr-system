@@ -26,7 +26,7 @@ import { query } from '#config/db.js';
  */
 export const findPayRunForCompute = async (payRunId) => {
   const sql = `
-    SELECT id, name, salary_structure_id,
+    SELECT id, name,
            start_date::text AS start_date,
            end_date::text   AS end_date,
            status
@@ -38,20 +38,21 @@ export const findPayRunForCompute = async (payRunId) => {
 };
 
 /**
- * Loads the salary structure attached to a pay run, for the "structure must
- * be active" pre-condition guard. Algorithm doc §1b.
+ * Loads a salary structure by its ID, used by the engine to check whether
+ * each contract's own structure is still active. Replaces the old
+ * pay-run-level structure guard.
  *
- * @param {number} payRunId
+ * @param {number} structureId
  * @returns {Promise<{id: number, name: string, status: string}|null>}
  */
-export const findStructureForPayRun = async (payRunId) => {
+export const findStructureById = async (structureId) => {
+  if (structureId === null || structureId === undefined) return null;
   const sql = `
-    SELECT ss.id, ss.name, ss.status
-    FROM salary_structures ss
-    JOIN pay_runs pr ON pr.salary_structure_id = ss.id
-    WHERE pr.id = $1;
+    SELECT id, name, status
+    FROM salary_structures
+    WHERE id = $1;
   `;
-  const { rows } = await query(sql, [payRunId]);
+  const { rows } = await query(sql, [structureId]);
   return rows[0] ?? null;
 };
 
