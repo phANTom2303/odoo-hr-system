@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: http://localhost:5001/api/pay-runs/1/compute
+  url: http://localhost:5001/api/pay-runs/12/compute
   auth: inherit
 
 settings:

@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://localhost:5001/api/payslips/1
+  url: http://localhost:5001/api/payslips/14
   auth: inherit
 
 settings:
@@ -27,7 +27,15 @@ docs: |2
     edits to the rules never alter a historical payslip. Ordered by sequence,
     which is the order the engine executed them in.
 
-    Deduction amounts are stored NEGATIVE (PF, PT, UNPAID_LV).
+    Every line with category "deduction" is stored NEGATIVE — PF, PT and the
+    synthetic UNPAID_LV alike. All other categories are positive, so the
+    deduction lines can be summed directly and the invariant holds:
+
+      totals.deduction === -payslip.total_deductions
+      net_salary       === gross_salary - total_deductions
+
+    Use total_deductions for a "Total Deductions" figure (positive magnitude),
+    and the signed line amounts for a ledger that adds up to net.
 
     Proration metadata per line: contract_id, segment_start, segment_end and
     proration_factor (1.0000 = the full period). A payslip spanning a

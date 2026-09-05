@@ -27,4 +27,4 @@ docs: |2
     POST /api/payslips/:id/review on each named payslip, then retry.
 
     On success: 200 { success: true, data: { status: "validated",
-    validated_at, payslips_validated } }
+    validated_at, payslips_updated } }

@@ -22,7 +22,7 @@ docs: |2
     Requires status "validated" — 409 otherwise.
 
     On success: 200 { success: true, data: { status: "paid", paid_at,
-    payslips_paid } }
+    payslips_updated } }
 
     Terminal state. A paid run is history: it can no longer be recomputed,
     updated or deleted. Paid payslips also stop counting toward the

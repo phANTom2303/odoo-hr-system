@@ -397,7 +397,17 @@ export const computeEmployeePayslip = async (ctx, employeeId) => {
                 amount = 0;
             }
 
+            // `computedValues` holds the UNSIGNED magnitude on purpose: a
+            // percentage rule based on a deduction (e.g. "5% of PF") must
+            // compute off its face value, not off a negative.
             computedValues.set(rule.id, amount);
+
+            // Deduction lines are persisted NEGATIVE so that every reduction on
+            // a payslip carries one consistent sign — the synthetic UNPAID_LV
+            // line (Phase 6) is negative too. Phase 7 sums deductions with
+            // Math.abs(), so the aggregates are unaffected by this sign.
+            const signedAmount =
+                rule.category === CATEGORY.DEDUCTION ? -Math.abs(amount) : amount;
 
             lines.push({
                 rule_id: rule.id,
@@ -407,7 +417,7 @@ export const computeEmployeePayslip = async (ctx, employeeId) => {
                 rule_name: rule.name,
                 category: rule.category,
                 sequence: rule.sequence,
-                amount,
+                amount: signedAmount,
                 contract_id: segment.contract.id,
                 segment_start: segment.start,
                 segment_end: segment.end,

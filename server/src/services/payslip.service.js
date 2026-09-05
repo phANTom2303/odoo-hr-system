@@ -22,10 +22,15 @@ const UNREVIEWABLE_STATUSES = new Set([PAYSLIP_STATUS.PAID, PAYSLIP_STATUS.CANCE
  * frontend's computation panel.
  *
  * Signs match the stored line amounts: `deduction` (PF, PT, UNPAID_LV) is
- * negative, every other category is positive. `gross` / `net` are the
- * back-filled placeholder rows, so on a multi-segment payslip they repeat the
- * whole-payslip total once per segment — read the payslip's own
- * `gross_salary` / `net_salary` columns for the authoritative aggregates.
+ * negative, every other category is positive. The engine persists every
+ * deduction line negative, so the invariant is:
+ *
+ *     totals.deduction === -payslip.total_deductions
+ *
+ * `gross` / `net` are the back-filled placeholder rows, so on a multi-segment
+ * payslip they repeat the whole-payslip total once per segment — read the
+ * payslip's own `gross_salary` / `net_salary` columns for the authoritative
+ * aggregates.
  *
  * @param {object[]} lines - Rows from `payslip.repo.js#findLines`.
  * @returns {{basic: number, allowance: number, gross: number, deduction: number, net: number}}
