@@ -10,8 +10,8 @@ import { initDatabase } from '#config/initDb.js';
 // ── Routers ──────────────────────────────────────────────────────────
 import taskRouter            from '#routes/task.routes.js';
 import contractRouter        from '#routes/contract.routes.js';
-import departmentRouter      from '#routes/department.routes.js';
-import jobPositionRouter     from '#routes/jobPosition.routes.js';
+// import departmentRouter      from '#routes/department.routes.js';
+// import jobPositionRouter     from '#routes/jobPosition.routes.js';
 import employeeRouter        from '#routes/employee.routes.js';
 import scheduleRouter        from '#routes/schedule.routes.js';
 import timeOffTypeRouter     from '#routes/timeOffType.routes.js';
@@ -35,8 +35,8 @@ await initDatabase();
 // ── Route Mounts ─────────────────────────────────────────────────────
 app.use('/api/tasks',             taskRouter);
 app.use('/api/contracts',         contractRouter);
-app.use('/api/departments',       departmentRouter);
-app.use('/api/job-positions',     jobPositionRouter);
+ app.use('/api/departments',       departmentRouter);
+ app.use('/api/job-positions',     jobPositionRouter);
 app.use('/api/employees',         employeeRouter);
 app.use('/api/schedules',         scheduleRouter);
 app.use('/api/time-off-types',    timeOffTypeRouter);
