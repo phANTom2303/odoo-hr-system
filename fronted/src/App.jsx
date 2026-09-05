@@ -1,122 +1,110 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AppProvider, useApp } from './context/AppContext';
+import Topbar from './components/Topbar';
 
-function App() {
-  const [count, setCount] = useState(0)
+// Auth
+import Login from './pages/auth/Login';
+import UserManagement from './pages/auth/UserManagement';
+
+// Employees
+import EmployeeList from './pages/employees/EmployeeList';
+import EmployeeForm from './pages/employees/EmployeeForm';
+
+// Contracts & Schedules
+import ContractList   from './pages/contracts/ContractList';
+import ContractForm   from './pages/contracts/ContractForm';
+import ScheduleList   from './pages/contracts/ScheduleList';
+import ScheduleForm   from './pages/contracts/ScheduleForm';
+
+// Attendance
+import AttendanceList from './pages/attendance/AttendanceList';
+import AttendanceForm from './pages/attendance/AttendanceForm';
+
+// Time Off
+import TimeOffRequests    from './pages/timeoff/TimeOffRequests';
+import TimeOffRequestForm from './pages/timeoff/TimeOffRequestForm';
+import Allocations        from './pages/timeoff/Allocations';
+import AllocationForm     from './pages/timeoff/AllocationForm';
+import TimeOffTypes       from './pages/timeoff/TimeOffTypes';
+import TimeOffTypeForm    from './pages/timeoff/TimeOffTypeForm';
+
+// Payroll
+import PayrunList           from './pages/payroll/PayrunList';
+import PayrunForm           from './pages/payroll/PayrunForm';
+import PayslipList          from './pages/payroll/PayslipList';
+import PayslipForm          from './pages/payroll/PayslipForm';
+import SalaryStructures     from './pages/payroll/SalaryStructures';
+import SalaryStructureForm  from './pages/payroll/SalaryStructureForm';
+import SalaryRules          from './pages/payroll/SalaryRules';
+import SalaryRuleForm       from './pages/payroll/SalaryRuleForm';
+
+// Dashboard
+import Dashboard from './pages/dashboard/Dashboard';
+
+function AppShell() {
+  const { currentUser } = useApp();
+
+  if (!currentUser) return <Login />;
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-shell">
+      <Topbar />
+      <div className="main-content">
+        <Routes>
+          <Route path="/"                           element={<Navigate to="/employees" replace />} />
 
-      <div className="ticks"></div>
+          {/* Employees */}
+          <Route path="/employees"                  element={<EmployeeList />} />
+          <Route path="/employees/:id"              element={<EmployeeForm />} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          {/* Contracts & Schedules */}
+          <Route path="/contracts"                  element={<ContractList />} />
+          <Route path="/contracts/:id"              element={<ContractForm />} />
+          <Route path="/schedules"                  element={<ScheduleList />} />
+          <Route path="/schedules/:id"              element={<ScheduleForm />} />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          {/* Attendance */}
+          <Route path="/attendance"                 element={<AttendanceList />} />
+          <Route path="/attendance/:id"             element={<AttendanceForm />} />
+
+          {/* Time Off */}
+          <Route path="/timeoff/requests"           element={<TimeOffRequests />} />
+          <Route path="/timeoff/requests/:id"       element={<TimeOffRequestForm />} />
+          <Route path="/timeoff/allocations"        element={<Allocations />} />
+          <Route path="/timeoff/allocations/:id"    element={<AllocationForm />} />
+          <Route path="/timeoff/types"              element={<TimeOffTypes />} />
+          <Route path="/timeoff/types/:id"          element={<TimeOffTypeForm />} />
+
+          {/* Payroll */}
+          <Route path="/payroll/runs"               element={<PayrunList />} />
+          <Route path="/payroll/runs/:id"           element={<PayrunForm />} />
+          <Route path="/payroll/payslips"           element={<PayslipList />} />
+          <Route path="/payroll/payslips/:id"       element={<PayslipForm />} />
+          <Route path="/salary/structures"          element={<SalaryStructures />} />
+          <Route path="/salary/structures/:id"      element={<SalaryStructureForm />} />
+          <Route path="/salary/rules"               element={<SalaryRules />} />
+          <Route path="/salary/rules/:id"           element={<SalaryRuleForm />} />
+
+          {/* Dashboard */}
+          <Route path="/dashboard"                  element={<Dashboard />} />
+
+          {/* Users (Admin only) */}
+          <Route path="/users"                      element={<UserManagement />} />
+
+          {/* Fallback */}
+          <Route path="*"                           element={<Navigate to="/employees" replace />} />
+        </Routes>
+      </div>
+    </div>
+  );
 }
 
-export default App
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppProvider>
+        <AppShell />
+      </AppProvider>
+    </BrowserRouter>
+  );
+}
