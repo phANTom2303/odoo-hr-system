@@ -1,0 +1,23 @@
+info:
+  name: update schedule put
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/schedules/1
+  body:
+    type: json
+    data: |2
+          {
+            "name": "Standard 40 hours Updated",
+            "is_active": true,
+            "lines": []
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

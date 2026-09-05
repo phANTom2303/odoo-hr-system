@@ -1,0 +1,17 @@
+info:
+  name: get all time off types
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://localhost:5001/api/time-off-types
+  body:
+    type: none
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

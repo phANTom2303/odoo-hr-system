@@ -1,0 +1,25 @@
+info:
+  name: update employee
+  type: http
+  seq: 5
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/employees/1
+  body:
+    type: json
+    data: |2
+          {
+            "first_name": "John",
+            "last_name": "Doe Updated",
+            "email": "johndoe.updated@example.com",
+            "phone": "+1987654321",
+            "department_id": 2
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

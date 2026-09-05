@@ -1,0 +1,29 @@
+info:
+  name: create time off type
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/time-off-types
+  body:
+    type: json
+    data: |2
+          {
+            "name": "Annual Leave",
+            "unit": "days",
+            "requires_allocation": true,
+            "approval_required": true,
+            "approver_role": "hr_manager",
+            "leave_validation": "manager",
+            "attendance_impact": "absent",
+            "is_paid": true,
+            "is_active": true
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,71 +1,86 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, X } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { getScheduleById, createSchedule, updateSchedule } from '../../api/schedules';
 
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
-function calcHours(start, end, brk) {
-  try {
-    const toMins = t => {
-      const [time, mer] = t.split(' ');
-      let [h, m] = time.split(':').map(Number);
-      if (mer === 'PM' && h !== 12) h += 12;
-      if (mer === 'AM' && h === 12) h = 0;
-      return h * 60 + m;
-    };
-    const brkMins = brk === '—' || !brk ? 0 : parseFloat(brk) * 60;
-    const worked = toMins(end) - toMins(start) - brkMins;
-    return `${(worked / 60).toFixed(1)}h`;
-  } catch { return '—'; }
-}
+const calcHours = (start, end, breakMins) => {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const worked = (eh * 60 + em) - (sh * 60 + sm) - (Number(breakMins) || 0);
+  return worked > 0 ? `${(worked / 60).toFixed(1)}h` : '—';
+};
 
 export default function ScheduleForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { schedules, setSchedules } = useApp();
-
+  const queryClient = useQueryClient();
   const isNew = id === 'new';
-  const existing = isNew ? null : schedules.find(s => s.id === Number(id));
 
-  const [form, setForm] = useState(existing || {
-    name: '', daysPerWeek: 5, hoursPerWeek: '40h', company: 'My Company', status: 'Active', lines: [],
-  });
   const [editing, setEditing] = useState(isNew);
+  const [form, setForm] = useState({ name: '', is_active: true, lines: [] });
 
-  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const { data: schedule, isLoading } = useQuery({
+    queryKey: ['schedule', id],
+    queryFn: () => getScheduleById(id).then(r => r.data),
+    enabled: !isNew,
+  });
+
+  useEffect(() => {
+    if (schedule) {
+      setForm({
+        name: schedule.name,
+        is_active: schedule.is_active,
+        lines: (schedule.lines ?? []).map(l => ({
+          day_of_week: l.day_of_week,
+          start_time: l.start_time?.slice(0, 5) ?? '09:00',
+          end_time: l.end_time?.slice(0, 5) ?? '18:00',
+          break_minutes: l.break_minutes ?? 0,
+        })),
+      });
+    }
+  }, [schedule]);
+
+  const createMutation = useMutation({
+    mutationFn: createSchedule,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['schedules'] }); navigate('/schedules'); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateSchedule,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['schedules'] }); queryClient.invalidateQueries({ queryKey: ['schedule', id] }); setEditing(false); },
+  });
+
+  const save = () => {
+    if (isNew) createMutation.mutate(form);
+    else       updateMutation.mutate({ id: Number(id), ...form });
+  };
 
   const addLine = () => setForm(f => ({
-    ...f,
-    lines: [...f.lines, { day: 'Monday', start: '09:00 AM', end: '06:00 PM', breakH: '1h', hours: '8h' }],
+    ...f, lines: [...f.lines, { day_of_week: 'monday', start_time: '09:00', end_time: '18:00', break_minutes: 60 }],
   }));
 
   const updateLine = (i, k, v) => setForm(f => {
     const lines = [...f.lines];
     lines[i] = { ...lines[i], [k]: v };
-    lines[i].hours = calcHours(lines[i].start, lines[i].end, lines[i].breakH);
     return { ...f, lines };
   });
 
   const removeLine = (i) => setForm(f => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }));
 
   const totalHours = form.lines.reduce((sum, l) => {
-    const h = parseFloat(l.hours) || 0;
-    return sum + h;
+    const [sh, sm] = l.start_time.split(':').map(Number);
+    const [eh, em] = l.end_time.split(':').map(Number);
+    const worked = (eh * 60 + em) - (sh * 60 + sm) - (Number(l.break_minutes) || 0);
+    return sum + (worked > 0 ? worked / 60 : 0);
   }, 0);
 
-  const save = () => {
-    const updated = { ...form, hoursPerWeek: `${totalHours}h`, daysPerWeek: form.lines.length };
-    if (isNew) {
-      setSchedules(prev => [...prev, { ...updated, id: Date.now() }]);
-      navigate('/schedules');
-    } else {
-      setSchedules(prev => prev.map(s => s.id === Number(id) ? { ...s, ...updated } : s));
-      setEditing(false);
-    }
-  };
+  const isPending = createMutation.isPending || updateMutation.isPending;
+  const error     = createMutation.error?.message || updateMutation.error?.message;
 
-  if (!isNew && !existing) return <div><p>Schedule not found.</p></div>;
+  if (!isNew && isLoading) return <div><p>Loading…</p></div>;
 
   return (
     <div>
@@ -83,31 +98,28 @@ export default function ScheduleForm() {
           {(editing || isNew) && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/schedules') : setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>Save</button>
+              <button className="btn btn-primary" onClick={save} disabled={isPending}>{isPending ? 'Saving…' : 'Save'}</button>
             </>
           )}
         </div>
       </div>
+
+      {error && <div className="alert alert-danger" style={{ marginBottom: 12 }}>{error}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-body">
           <div className="form-grid">
             <div className="form-group">
               <label>Schedule Name <span className="req">*</span></label>
-              <input className="form-control" value={form.name} disabled={!editing} onChange={e => setField('name', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Company</label>
-              <input className="form-control" value={form.company} disabled={!editing} onChange={e => setField('company', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Timezone</label>
-              <input className="form-control" defaultValue="Company timezone" disabled={!editing} />
+              <input className="form-control" value={form.name} disabled={!editing}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div className="form-group">
               <label>Status</label>
-              <select className="form-control" value={form.status} disabled={!editing} onChange={e => setField('status', e.target.value)}>
-                <option>Active</option><option>Inactive</option>
+              <select className="form-control" value={form.is_active ? 'active' : 'inactive'} disabled={!editing}
+                onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'active' }))}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
           </div>
@@ -126,46 +138,36 @@ export default function ScheduleForm() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>Day</th>
-                <th>Start Time</th>
-                <th>End Time</th>
-                <th>Break</th>
-                <th>Hours</th>
-                {editing && <th></th>}
-              </tr>
+              <tr><th>Day</th><th>Start</th><th>End</th><th>Break (min)</th><th>Hours</th>{editing && <th></th>}</tr>
             </thead>
             <tbody>
               {form.lines.map((line, i) => (
                 <tr key={i}>
                   <td>
                     {editing ? (
-                      <select className="form-control" value={line.day} onChange={e => updateLine(i, 'day', e.target.value)} style={{ width: 'auto' }}>
-                        {DAYS.map(d => <option key={d}>{d}</option>)}
+                      <select className="form-control" value={line.day_of_week}
+                        onChange={e => updateLine(i, 'day_of_week', e.target.value)} style={{ width: 'auto' }}>
+                        {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
-                    ) : line.day}
+                    ) : line.day_of_week}
                   </td>
                   <td>
-                    {editing ? (
-                      <input className="form-control" value={line.start} onChange={e => updateLine(i, 'start', e.target.value)} style={{ width: 110 }} />
-                    ) : line.start}
+                    {editing ? <input className="form-control" type="time" value={line.start_time}
+                      onChange={e => updateLine(i, 'start_time', e.target.value)} style={{ width: 110 }} />
+                      : line.start_time}
                   </td>
                   <td>
-                    {editing ? (
-                      <input className="form-control" value={line.end} onChange={e => updateLine(i, 'end', e.target.value)} style={{ width: 110 }} />
-                    ) : line.end}
+                    {editing ? <input className="form-control" type="time" value={line.end_time}
+                      onChange={e => updateLine(i, 'end_time', e.target.value)} style={{ width: 110 }} />
+                      : line.end_time}
                   </td>
                   <td>
-                    {editing ? (
-                      <input className="form-control" value={line.breakH} onChange={e => updateLine(i, 'breakH', e.target.value)} style={{ width: 70 }} />
-                    ) : line.breakH}
+                    {editing ? <input className="form-control" type="number" value={line.break_minutes}
+                      onChange={e => updateLine(i, 'break_minutes', Number(e.target.value))} style={{ width: 80 }} />
+                      : line.break_minutes}
                   </td>
-                  <td style={{ fontWeight: 500 }}>{line.hours}</td>
-                  {editing && (
-                    <td>
-                      <button className="btn-ghost btn" onClick={() => removeLine(i)}><X size={14} /></button>
-                    </td>
-                  )}
+                  <td style={{ fontWeight: 500 }}>{calcHours(line.start_time, line.end_time, line.break_minutes)}</td>
+                  {editing && <td><button className="btn btn-ghost btn-sm" onClick={() => removeLine(i)}><X size={14} /></button></td>}
                 </tr>
               ))}
             </tbody>
@@ -173,12 +175,8 @@ export default function ScheduleForm() {
         </div>
         <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: 8, fontSize: 13, fontWeight: 600, borderTop: '1px solid var(--gray-100)' }}>
           <span style={{ color: 'var(--gray-500)' }}>Total Weekly Hours:</span>
-          <span>{totalHours}h</span>
+          <span>{totalHours.toFixed(1)}h</span>
         </div>
-      </div>
-
-      <div style={{ marginTop: 12, fontSize: 12, color: 'var(--gray-400)' }}>
-        Use this schedule as the employee/contract working pattern.
       </div>
     </div>
   );

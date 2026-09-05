@@ -1,32 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { getSalaryStructureById, createSalaryStructure, updateSalaryStructure } from '../../api/salary';
 
 export default function SalaryStructureForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { salaryStructures, setSalaryStructures, salaryRules } = useApp();
-
+  const queryClient = useQueryClient();
   const isNew = id === 'new';
-  const existing = isNew ? null : salaryStructures.find(s => s.id === Number(id));
 
-  const [form, setForm] = useState(existing || { name: '', rules: 0, employees: 0, status: 'Active' });
   const [editing, setEditing] = useState(isNew);
+  const [form, setForm] = useState({ name: '', status: 'active' });
 
-  const structureRules = salaryRules.filter(r => r.structure === (existing?.name || form.name)).sort((a, b) => a.sequence - b.sequence);
+  const { data: structure, isLoading } = useQuery({
+    queryKey: ['salary-structure', id],
+    queryFn: () => getSalaryStructureById(id).then(r => r.data),
+    enabled: !isNew,
+  });
+
+  useEffect(() => { if (structure) setForm({ name: structure.name, status: structure.status }); }, [structure]);
+
+  const createMutation = useMutation({
+    mutationFn: createSalaryStructure,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['salary-structures'] }); navigate('/salary/structures'); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateSalaryStructure,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['salary-structures'] }); queryClient.invalidateQueries({ queryKey: ['salary-structure', id] }); setEditing(false); },
+  });
 
   const save = () => {
-    if (isNew) {
-      setSalaryStructures(prev => [...prev, { ...form, id: Date.now(), rules: 0, employees: 0 }]);
-      navigate('/salary/structures');
-    } else {
-      setSalaryStructures(prev => prev.map(s => s.id === Number(id) ? { ...s, ...form } : s));
-      setEditing(false);
-    }
+    if (isNew) createMutation.mutate(form);
+    else       updateMutation.mutate({ id: Number(id), ...form });
   };
 
-  if (!isNew && !existing) return <div><p>Structure not found.</p></div>;
+  const isPending = createMutation.isPending || updateMutation.isPending;
+  const error     = createMutation.error?.message || updateMutation.error?.message;
+
+  if (!isNew && isLoading) return <div><p>Loading…</p></div>;
+
+  const rules = structure?.rules ?? [];
 
   return (
     <div>
@@ -44,47 +59,51 @@ export default function SalaryStructureForm() {
           {(editing || isNew) && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/salary/structures') : setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>Save</button>
+              <button className="btn btn-primary" onClick={save} disabled={isPending}>{isPending ? 'Saving…' : 'Save'}</button>
             </>
           )}
         </div>
       </div>
+
+      {error && <div className="alert alert-danger" style={{ marginBottom: 12 }}>{error}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-body">
           <div className="form-grid">
             <div className="form-group">
               <label>Structure Name <span className="req">*</span></label>
-              <input className="form-control" value={form.name} disabled={!editing} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-control" value={form.name} disabled={!editing}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div className="form-group">
               <label>Status</label>
-              <select className="form-control" value={form.status} disabled={!editing} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                <option>Active</option><option>Inactive</option>
+              <select className="form-control" value={form.status} disabled={!editing}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                <option value="active">Active</option><option value="inactive">Inactive</option>
               </select>
             </div>
           </div>
         </div>
       </div>
 
-      {!isNew && structureRules.length > 0 && (
+      {!isNew && rules.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <h3>Salary Rules ({structureRules.length})</h3>
+            <h3>Salary Rules ({rules.length})</h3>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Seq</th><th>Name</th><th>Code</th><th>Category</th><th>Computation</th></tr>
+                <tr><th>Seq</th><th>Name</th><th>Code</th><th>Category</th><th>Type</th></tr>
               </thead>
               <tbody>
-                {structureRules.map(r => (
+                {rules.map(r => (
                   <tr key={r.id} onClick={() => navigate(`/salary/rules/${r.id}`)}>
                     <td style={{ color: 'var(--gray-400)' }}>{r.sequence}</td>
                     <td style={{ fontWeight: 500 }}>{r.name}</td>
                     <td className="font-mono">{r.code}</td>
                     <td>{r.category}</td>
-                    <td>{r.computation}</td>
+                    <td>{r.rule_type}</td>
                   </tr>
                 ))}
               </tbody>

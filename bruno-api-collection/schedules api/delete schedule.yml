@@ -1,0 +1,15 @@
+info:
+  name: delete schedule
+  type: http
+  seq: 6
+
+http:
+  method: DELETE
+  url: http://localhost:5001/api/schedules/1
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

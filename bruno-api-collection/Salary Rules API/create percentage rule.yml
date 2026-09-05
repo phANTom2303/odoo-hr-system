@@ -1,0 +1,27 @@
+info:
+  name: create percentage rule
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: http://localhost:5001/api/salary-structures/1/rules
+  body:
+    type: json
+    data: |2
+          {
+            "code": "HRA",
+            "name": "House Rent Allowance",
+            "category": "Allowance",
+            "sequence": 20,
+            "rule_type": "percentage",
+            "percentage": 40.00,
+            "base_rule_id": 1
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,26 @@
+info:
+  name: update rule put
+  type: http
+  seq: 6
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/salary-rules/1
+  body:
+    type: json
+    data: |2
+          {
+            "code": "BASIC_UPDATED",
+            "name": "Basic Salary Updated",
+            "category": "Basic",
+            "sequence": 10,
+            "rule_type": "fixed",
+            "fixed_amount": 6000.00
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

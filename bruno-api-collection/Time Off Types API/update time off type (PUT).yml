@@ -1,0 +1,29 @@
+info:
+  name: update time off type (PUT)
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/time-off-types/1
+  body:
+    type: json
+    data: |2
+          {
+            "name": "Annual Leave (Updated)",
+            "unit": "days",
+            "requires_allocation": true,
+            "approval_required": true,
+            "approver_role": "manager",
+            "leave_validation": "manager",
+            "attendance_impact": "absent",
+            "is_paid": true,
+            "is_active": true
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

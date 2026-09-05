@@ -1,0 +1,24 @@
+info:
+  name: update holiday
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/holidays/1
+  body:
+    type: json
+    data: |2
+          {
+            "name": "New Year Updated",
+            "date": "2026-01-01",
+            "holiday_type": "national",
+            "is_paid": false
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

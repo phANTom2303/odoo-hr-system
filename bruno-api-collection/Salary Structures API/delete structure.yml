@@ -1,0 +1,9 @@
+info:
+  name: delete structure
+  type: http
+  seq: 6
+
+http:
+  method: DELETE
+  url: http://localhost:5001/api/salary-structures/1
+  auth: inherit

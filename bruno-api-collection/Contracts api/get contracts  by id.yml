@@ -1,0 +1,60 @@
+info:
+  name: get contracts  by id
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: http://localhost:5001/api/contracts/1
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    1. Activate a draft contract
+
+      {
+        "status": "active"
+      }
+
+    2. Activate with a specific end date
+      {
+        "status": "active",
+        "end_date": "2026-12-31"
+      }
+
+    3. Manually expire an active contract (layoff / making room for a new one)
+      {
+        "status": "expired",
+        "end_date": "2026-09-04"
+      }
+
+    4. Cancel a draft contract
+
+      {
+        "status": "cancelled"
+      }
+
+    5. Cancel an active contract
+
+      {
+        "status": "cancelled",
+        "end_date": "2026-09-05"
+      }
+
+    6. Update only the end_date on an active contract (no status change)
+
+      {
+        "end_date": "2027-03-31"
+      }
+
+    │ Tip for testing the conflict flow in Bruno:
+    │
+    │ 1. First PUT the old active contract with body #3 to expire it.
+    │ 2. Then PUT the new draft contract with body #1 or #2 to activate it.
+    │
+    │ If you skip step 1, you'll get a 409 with the message naming the blocking contract ID.

@@ -1,0 +1,21 @@
+info:
+  name: patch job position
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: http://localhost:5001/api/job-positions/1
+  body:
+    type: json
+    data: |2
+          {
+            "title": "Principal Software Engineer"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

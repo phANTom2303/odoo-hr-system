@@ -1,0 +1,22 @@
+info:
+  name: update job position
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/job-positions/1
+  body:
+    type: json
+    data: |2
+          {
+            "title": "Lead Software Engineer",
+            "department_id": 2
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

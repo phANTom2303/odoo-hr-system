@@ -1,16 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { getTimeOffTypes } from '../../api/timeOffTypes';
 
 export default function TimeOffTypes() {
-  const { timeOffTypes } = useApp();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
-  const filtered = timeOffTypes.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['time-off-types'],
+    queryFn: () => getTimeOffTypes().then(r => r.data),
+  });
+
+  const types = (data ?? []).filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (isLoading) return <div className="page-header"><p>Loading…</p></div>;
+  if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load time off types.</p></div>;
 
   return (
     <div>
@@ -35,29 +41,21 @@ export default function TimeOffTypes() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>Type</th>
-                <th>Unit</th>
-                <th>Allocation</th>
-                <th>Approval</th>
-                <th>Status</th>
-              </tr>
+              <tr><th>Type</th><th>Unit</th><th>Requires Allocation</th><th>Approval</th><th>Paid</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {filtered.map(t => (
+              {types.map(t => (
                 <tr key={t.id} onClick={() => navigate(`/timeoff/types/${t.id}`)}>
                   <td style={{ fontWeight: 500 }}>{t.name}</td>
                   <td>{t.unit}</td>
-                  <td>{t.requiresAllocation}</td>
-                  <td>{t.approval}</td>
-                  <td><span className={`badge ${t.status === 'Active' ? 'badge-green' : 'badge-gray'}`}>{t.status}</span></td>
+                  <td>{t.requires_allocation ? 'Yes' : 'No'}</td>
+                  <td>{t.leave_validation}</td>
+                  <td>{t.is_paid ? 'Yes' : 'No'}</td>
+                  <td><span className={`badge ${t.is_active ? 'badge-green' : 'badge-gray'}`}>{t.is_active ? 'Active' : 'Inactive'}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-        <div style={{ padding: '10px 20px', fontSize: 12, color: 'var(--gray-400)' }}>
-          This list defines policy rules, not employee transactions.
         </div>
       </div>
     </div>

@@ -1,0 +1,15 @@
+info:
+  name: update structure (PATCH)
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: http://localhost:5001/api/salary-structures/1
+  body:
+    type: json
+    data: |
+      {
+        "status": "active"
+      }
+  auth: inherit

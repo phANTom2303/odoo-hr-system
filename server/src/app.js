@@ -1,56 +1,58 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet'; // Standard security headers
+import helmet from 'helmet';
 import { logger } from '#config/logger.js';
 import { RESPONSE_CODES } from '#lib/common.js';
 import { AppError } from '#lib/errors.js';
-import taskRouter from '#routes/task.routes.js';
-import departmentRouter from '#routes/department.routes.js';
-import jobPositionRouter from '#routes/jobPosition.routes.js';
-import contractRouter from '#routes/contract.routes.js';
 import { initDatabase } from '#config/initDb.js';
+
+// ── Routers ──────────────────────────────────────────────────────────
+import contractRouter        from '#routes/contract.routes.js';
+import departmentRouter      from '#routes/department.routes.js';
+import jobPositionRouter     from '#routes/jobPosition.routes.js';
+import employeeRouter        from '#routes/employee.routes.js';
+import scheduleRouter        from '#routes/schedule.routes.js';
+import timeOffTypeRouter     from '#routes/timeOffType.routes.js';
+import holidayRouter         from '#routes/holiday.routes.js';
+import salaryStructureRouter from '#routes/salaryStructure.routes.js';
+import salaryRuleRouter      from '#routes/salaryRule.routes.js';
 
 const app = express();
 
-// Global Middlewares
 app.use(helmet());
 app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
 }));
-app.use(express.json()); // Parse incoming JSON payloads
+app.use(express.json());
 
-// await initRedis();
 await initDatabase();
 
-// ── Route Mounts ────────────────────────────────────────────────────
-app.use('/api/tasks', taskRouter);
-app.use('/api/departments', departmentRouter);
-app.use('/api/job-positions', jobPositionRouter);
-app.use('/api/contracts', contractRouter);
+// ── Route Mounts ─────────────────────────────────────────────────────
+app.use('/api/contracts',         contractRouter);
+app.use('/api/departments',      departmentRouter);
+app.use('/api/job-positions',    jobPositionRouter);
+app.use('/api/employees',         employeeRouter);
+app.use('/api/schedules',         scheduleRouter);
+app.use('/api/time-off-types',    timeOffTypeRouter);
+app.use('/api/holidays',          holidayRouter);
+app.use('/api/salary-structures', salaryStructureRouter);
+app.use('/api/salary-rules',      salaryRuleRouter);
 
-// Global Error Handler
+// ── Global Error Handler ──────────────────────────────────────────────
 app.use((err, req, res, next) => {
     if (err instanceof AppError && err.isOperational) {
         logger.warn(`Operational Error [${err.status}]: ${err.message}`);
-
-        return res.status(err.status).json({
-            success: false,
-            error: err.message
-        });
+        return res.status(err.status).json({ success: false, error: err.message });
     }
-
     logger.error(`Unanticipated ERROR: ${err.message}\nStack: ${err.stack}`);
-
     return res.status(RESPONSE_CODES.INTERNAL_SERVER_ERROR_CODE).json({
         success: false,
-        error: "An unexpected internal server error occurred."
+        error: 'An unexpected internal server error occurred.',
     });
 });
 
 const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
-    logger.info(`Server is running on Port ${PORT}`);
-});
+app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));

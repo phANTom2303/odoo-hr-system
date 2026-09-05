@@ -1,0 +1,21 @@
+info:
+  name: update time off type (PATCH)
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: http://localhost:5001/api/time-off-types/1
+  body:
+    type: json
+    data: |2
+          {
+            "name": "Annual Leave (Patched)"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

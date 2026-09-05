@@ -1,0 +1,9 @@
+info:
+  name: get all structures
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://localhost:5001/api/salary-structures
+  auth: inherit
