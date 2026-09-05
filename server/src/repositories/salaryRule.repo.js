@@ -57,7 +57,7 @@ export const create = async (structureId, fields) => {
         structureId,
         fields.code.toUpperCase(),
         fields.name,
-        fields.category,
+        fields.category?.toLowerCase(),
         fields.sequence,
         fields.rule_type,
         fields.fixed_amount ?? null,
@@ -78,7 +78,7 @@ export const update = async (id, fields) => {
     for (const key of allowedKeys) {
         if (fields[key] !== undefined) {
             setClauses.push(`${key} = $${p++}`);
-            values.push(key === 'code' ? fields[key].toUpperCase() : fields[key]);
+            values.push(key === 'code' ? fields[key].toUpperCase() : key === 'category' ? fields[key].toLowerCase() : fields[key]);
         }
     }
     if (setClauses.length === 0) return findById(id);
