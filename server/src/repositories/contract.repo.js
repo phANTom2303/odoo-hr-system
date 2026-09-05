@@ -24,6 +24,25 @@ export const findAll = async () => {
     return rows;
 };
 
+export const getPaginated = async(perPageEntries, pageNumber)  => {
+    const toSkip = (pageNumber - 1) * perPageEntries;
+     const sql = `
+        SELECT 
+            c.id, 
+            u.first_name || ' ' || u.last_name AS employee_name, 
+            c.start_date, 
+            c.end_date, 
+            c.status 
+        FROM contracts c
+        JOIN users u ON c.employee_id = u.id
+        ORDER BY c.created_at DESC
+        LIMIT $1
+        OFFSET $2;
+    `;
+    const { rows } = await query(sql, [perPageEntries, toSkip]);
+    return rows;
+}
+
 /**
  * Fetch a contract by ID, replacing ID fields with their corresponding names.
  * @param {number|string} id 
