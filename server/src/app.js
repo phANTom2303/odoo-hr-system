@@ -19,6 +19,8 @@ import timeOffTypeRouter     from '#routes/timeOffType.routes.js';
 import holidayRouter         from '#routes/holiday.routes.js';
 import salaryStructureRouter from '#routes/salaryStructure.routes.js';
 import salaryRuleRouter      from '#routes/salaryRule.routes.js';
+import payRunRouter          from '#routes/payRun.routes.js';
+import payslipRouter         from '#routes/payslip.routes.js';
 
 const app = express();
 
@@ -45,6 +47,8 @@ app.use('/api/time-off-types',    timeOffTypeRouter);
 app.use('/api/holidays',          holidayRouter);
 app.use('/api/salary-structures', salaryStructureRouter);
 app.use('/api/salary-rules',      salaryRuleRouter);
+app.use('/api/pay-runs',          payRunRouter);
+app.use('/api/payslips',          payslipRouter);
 
 // ── Global Error Handler ──────────────────────────────────────────────
 app.use((err, req, res, next) => {

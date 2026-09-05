@@ -1,0 +1,31 @@
+info:
+  name: update pay run
+  type: http
+  seq: 8
+
+http:
+  method: PUT
+  url: http://localhost:5001/api/pay-runs/1
+  body:
+    type: json
+    data: |2
+          {
+            "name": "September 2026 Payroll (revised)"
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    Renames a draft pay run. "name" is the only mutable field — the period,
+    structure and employee selection are fixed at creation.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    Draft only: 409 once the run has been computed, since payslips are
+    already attached.
+    400 when "name" is missing or blank; 404 when the run does not exist.

@@ -1,0 +1,30 @@
+info:
+  name: validate pay run
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: http://localhost:5001/api/pay-runs/1/validate
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    The review gate. Moves the run and all its payslips to "validated".
+
+    Roles: admin, hr_payroll_manager
+
+    Requires status "computed" — 409 otherwise.
+
+    Blocked with 409 "Unreviewed error payslips exist: <names>" while any
+    payslip carries an error-severity warning (NO_ACTIVE_CONTRACT or
+    DUPLICATE_PAYSLIP) and has not been reviewed. Clear it by calling
+    POST /api/payslips/:id/review on each named payslip, then retry.
+
+    On success: 200 { success: true, data: { status: "validated",
+    validated_at, payslips_validated } }
