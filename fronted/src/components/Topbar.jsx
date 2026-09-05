@@ -142,30 +142,45 @@ export default function Topbar() {
       <div style={{ fontSize: 12, color: 'var(--gray-300)', marginRight: 8 }}>HR</div>
 
       <nav className="topbar-nav">
-        <NavItem label="Employees ▾" active={path.startsWith('/employees') || path.startsWith('/schedules')}
-          children={[
-            { label: 'Employees',        to: '/employees' },
-            { label: 'Contracts',        to: '/contracts' },
-            { label: 'Working Schedules',to: '/schedules' },
-          ]}
-        />
+        {['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) ? (
+          <NavItem label="Employees ▾" active={path.startsWith('/employees') || path.startsWith('/schedules') || path.startsWith('/contracts')}
+            children={[
+              { label: 'Employees',        to: '/employees' },
+              { label: 'Contracts',        to: '/contracts' },
+              { label: 'Working Schedules',to: '/schedules' },
+            ]}
+          />
+        ) : (
+          <NavItem label="My Schedule" to="/schedules" active={path.startsWith('/schedules')} />
+        )}
+
         <NavItem label="Attendance" to="/attendance" active={path.startsWith('/attendance')} />
+
         <NavItem label="Time Off ▾" active={path.startsWith('/timeoff')}
           children={[
             { label: 'Requests',       to: '/timeoff/requests' },
             { label: 'Allocations',    to: '/timeoff/allocations' },
-            { label: 'Time Off Types', to: '/timeoff/types' },
+            ...( (currentUser?.role === 'employee' || currentUser?.role === 'Employee') ? [] : [{ label: 'Time Off Types', to: '/timeoff/types' }] )
           ]}
         />
-        <NavItem label="Payroll ▾" active={path.startsWith('/payroll') || path.startsWith('/salary')}
-          children={[
-            { label: 'Pay Runs',          to: '/payroll/runs' },
-            { label: 'Payslips',          to: '/payroll/payslips' },
-            { label: 'Salary Structures', to: '/salary/structures' },
-            { label: 'Salary Rules',      to: '/salary/rules' },
-          ]}
-        />
-        <NavItem label="Dashboard" to="/dashboard" active={path === '/dashboard'} />
+
+        {['hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) ? (
+          <NavItem label="Payroll ▾" active={path.startsWith('/payroll') || path.startsWith('/salary')}
+            children={[
+              { label: 'Pay Runs',          to: '/payroll/runs' },
+              { label: 'Payslips',          to: '/payroll/payslips' },
+              { label: 'Salary Structures', to: '/salary/structures' },
+              { label: 'Salary Rules',      to: '/salary/rules' },
+            ]}
+          />
+        ) : (
+          <NavItem label="My Payslips" to="/payroll/payslips" active={path.startsWith('/payroll/payslips')} />
+        )}
+
+        {['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) && (
+          <NavItem label="Dashboard" to="/dashboard" active={path === '/dashboard'} />
+        )}
+
         {currentUser?.role === 'admin' && (
           <NavItem label="Users" to="/users" active={path === '/users'} />
         )}

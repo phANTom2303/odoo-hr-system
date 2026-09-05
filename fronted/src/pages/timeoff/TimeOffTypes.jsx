@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { getTimeOffTypes } from '../../api/timeOffTypes';
+import { useAuth } from '../../context/AppContext';
 
 export default function TimeOffTypes() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const { currentUser } = useAuth();
+  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['time-off-types'],
@@ -14,6 +17,9 @@ export default function TimeOffTypes() {
   });
 
   const types = (data ?? []).filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+
+  // TODO: The backend should return a 403 Forbidden for employees accessing this endpoint.
+  if (isEmployeeOnly) return <div className="page-header"><p>Forbidden: You do not have permission to view Time Off Types.</p></div>;
 
   if (isLoading) return <div className="page-header"><p>Loading…</p></div>;
   if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load time off types.</p></div>;

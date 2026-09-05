@@ -3,12 +3,16 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getContracts } from '../../api/contracts';
+import { useAuth } from '../../context/AppContext';
 
 export default function ContractList() {
     const navigate = useNavigate();
+    const { currentUser } = useAuth();
     const [params] = useSearchParams();
     const empFilter = params.get('employee');
     const [search, setSearch] = useState('');
+
+    const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
 
     const { data: contracts = [], isLoading, isError, error } = useQuery({
         queryKey: ['contracts', { empFilter }],
@@ -16,7 +20,13 @@ export default function ContractList() {
     });
 
     const searchTerm = search.toLowerCase();
-    const allContracts = contracts.data ?? [];
+    
+    // TODO: The backend should filter this automatically for the Employee role.
+    const rawContracts = contracts.data ?? [];
+    const allContracts = (isEmployeeOnly && currentUser?.employeeId)
+      ? rawContracts.filter(c => c.employee_id === currentUser.employeeId)
+      : rawContracts;
+
     const filtered = allContracts.filter(c => {
         if (searchTerm.length >= 1) {
             return c.employee_name?.toLowerCase().includes(searchTerm) ||
@@ -41,9 +51,11 @@ export default function ContractList() {
                     <div className="page-breadcrumb">Employees ▸ <span>Contracts</span></div>
                     <h1>Contracts</h1>
                 </div>
-                <button className="btn btn-primary" onClick={() => navigate('/contracts/new')}>
-                    <Plus size={15} /> New
-                </button>
+                {!isEmployeeOnly && (
+                    <button className="btn btn-primary" onClick={() => navigate('/contracts/new')}>
+                        <Plus size={15} /> New
+                    </button>
+                )}
             </div>
 
             <div className="toolbar">

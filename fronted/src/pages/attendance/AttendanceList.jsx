@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useApp, useAuth } from '../../context/AppContext';
 
 export default function AttendanceList() {
   const { attendanceRecords } = useApp();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const empFilter = params.get('employee');
   const [search, setSearch] = useState('');
 
-  const filtered = attendanceRecords.filter(a => {
+  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee';
+
+  // TODO: When API is connected, the backend should filter attendance records for the Employee role.
+  const allowedRecords = isEmployeeOnly && currentUser?.employeeId 
+    ? attendanceRecords.filter(a => a.employeeId === currentUser.employeeId)
+    : attendanceRecords;
+
+  const filtered = allowedRecords.filter(a => {
     const matchEmp = empFilter ? a.employeeId === Number(empFilter) : true;
     const matchSearch = a.employeeName.toLowerCase().includes(search.toLowerCase());
     return matchEmp && matchSearch;
@@ -30,9 +38,11 @@ export default function AttendanceList() {
           <div className="page-breadcrumb">HR ▸ <span>Attendance</span></div>
           <h1>{empFilter ? `Attendance` : 'Attendance'}</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/attendance/new')}>
-          <Plus size={15} /> New
-        </button>
+        {!isEmployeeOnly && (
+          <button className="btn btn-primary" onClick={() => navigate('/attendance/new')}>
+            <Plus size={15} /> New
+          </button>
+        )}
       </div>
 
       <div className="toolbar">

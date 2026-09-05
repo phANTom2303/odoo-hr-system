@@ -11,6 +11,8 @@
 
 import { Router } from 'express';
 import * as jobPositionController from '#controllers/jobPosition.controller.js';
+import { requireAuth } from '#middlewares/auth.js';
+import { HR_ALL, ALL_ROLES } from '#lib/roles.js';
 
 const router = Router();
 
@@ -18,27 +20,27 @@ const router = Router();
 
 // GET /api/job-positions
 // Access: all authenticated roles
-router.get('/', jobPositionController.getAll);
+router.get('/', requireAuth(...ALL_ROLES), jobPositionController.getAll);
 
 // GET /api/job-positions/:id
 // Access: all authenticated roles
-router.get('/:id', jobPositionController.getById);
+router.get('/:id', requireAuth(...ALL_ROLES), jobPositionController.getById);
 
 // POST /api/job-positions
 // Access: hr_manager, hr_payroll_manager, admin
-router.post('/', jobPositionController.create);
+router.post('/', requireAuth(...HR_ALL), jobPositionController.create);
 
 // PUT /api/job-positions/:id
 // Access: hr_manager, hr_payroll_manager, admin
-router.put('/:id', jobPositionController.update);
+router.put('/:id', requireAuth(...HR_ALL), jobPositionController.update);
 
 // PATCH /api/job-positions/:id
 // Access: hr_manager, hr_payroll_manager, admin
-router.patch('/:id', jobPositionController.patch);
+router.patch('/:id', requireAuth(...HR_ALL), jobPositionController.patch);
 
 // DELETE /api/job-positions/:id
 // Access: hr_manager, hr_payroll_manager, admin
 // Blocked at service layer if referenced by active employees or contracts (409)
-router.delete('/:id', jobPositionController.remove);
+router.delete('/:id', requireAuth(...HR_ALL), jobPositionController.remove);
 
 export default router;
