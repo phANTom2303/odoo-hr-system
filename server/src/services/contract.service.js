@@ -15,8 +15,8 @@ const VALID_TRANSITIONS = new Map([
 
 // ── Service Methods ─────────────────────────────────────────────────
 
-export const getAll = async () => {
-    const rows = await contractRepo.findAll();
+export const getAll = async (filters = {}) => {
+    const rows = await contractRepo.findAll(filters);
     return rows;
 };
 

@@ -59,7 +59,7 @@ export const computeWeeklyHours = (lines) => {
     return lines.reduce((total, line) => {
         const [sh, sm] = line.start_time.split(':').map(Number);
         const [eh, em] = line.end_time.split(':').map(Number);
-        const worked = (eh * 60 + em) - (sh * 60 + sm) - (line.break_minutes ?? 0);
+        const worked = (eh * 60 + em) - (sh * 60 + sm) - (line.break_minutes || 0);
         return total + (worked / 60);
     }, 0);
 };
@@ -80,7 +80,7 @@ export const create = async (name, lines) => {
             await client.query(
                 `INSERT INTO schedule_lines (schedule_id, day_of_week, start_time, end_time, break_minutes)
                  VALUES ($1, $2, $3, $4, $5);`,
-                [schedule.id, line.day_of_week, line.start_time, line.end_time, line.break_minutes ?? 0]
+                [schedule.id, line.day_of_week, line.start_time, line.end_time, line.break_minutes || 0]
             );
         }
 
@@ -103,7 +103,7 @@ export const update = async (id, fields, lines) => {
                 await client.query(
                     `INSERT INTO schedule_lines (schedule_id, day_of_week, start_time, end_time, break_minutes)
                      VALUES ($1, $2, $3, $4, $5);`,
-                    [id, line.day_of_week, line.start_time, line.end_time, line.break_minutes ?? 0]
+                    [id, line.day_of_week, line.start_time, line.end_time, line.break_minutes || 0]
                 );
             }
         }

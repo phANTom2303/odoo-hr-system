@@ -20,8 +20,9 @@ export const findAll = async ({ search, department, status, role } = {}) => {
         values.push(`%${department}%`);
         i++;
     }
-    if (status === 'active')   { conditions.push(`u.is_active = TRUE`); }
-    if (status === 'inactive') { conditions.push(`u.is_active = FALSE`); }
+    if (status === 'active')   { conditions.push(`u.employment_status = 'active'`); }
+    if (status === 'inactive') { conditions.push(`u.employment_status = 'inactive'`); }
+    if (!status)               { conditions.push(`u.is_active = TRUE`); } // hide soft-deleted by default
     if (role)                  { conditions.push(`u.role = $${i}`); values.push(role); i++; }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

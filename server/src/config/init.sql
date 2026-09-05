@@ -92,7 +92,8 @@ CREATE TYPE user_role AS ENUM (
 CREATE TYPE employment_status AS ENUM (
   'active',
   'on_notice',
-  'terminated'
+  'terminated',
+  'inactive'
 );
 
 CREATE TYPE employee_type AS ENUM (

@@ -1,7 +1,10 @@
 import { fetcher } from './client';
 
-export const getContracts = async () => {
-  return fetcher('/contracts');
+export const getContracts = async (params = {}) => {
+  const qs = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== ''))
+  ).toString();
+  return fetcher(`/contracts${qs ? `?${qs}` : ''}`);
 };
 
 export const getContractById = async (id) => {

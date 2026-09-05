@@ -9,7 +9,8 @@ import { NotFoundError } from '#lib/errors.js';
 
 /** GET /api/contracts */
 export const getAll = asyncHandler(async (req, res) => {
-    const items = await contractService.getAll();
+    const { employee_id } = req.query;
+    const items = await contractService.getAll({ employee_id });
 
     res.status(RESPONSE_CODES.SUCCESS_CODE).json({
         success: true,

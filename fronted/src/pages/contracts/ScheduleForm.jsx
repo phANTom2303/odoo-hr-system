@@ -21,6 +21,13 @@ export default function ScheduleForm() {
 
   const [editing, setEditing] = useState(isNew);
   const [form, setForm] = useState({ name: '', is_active: true, lines: [] });
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const t = setTimeout(() => setMessages([]), 3000);
+    return () => clearTimeout(t);
+  }, [messages]);
 
   const { data: schedule, isLoading } = useQuery({
     queryKey: ['schedule', id],
@@ -37,7 +44,7 @@ export default function ScheduleForm() {
           day_of_week: l.day_of_week,
           start_time: l.start_time?.slice(0, 5) ?? '09:00',
           end_time: l.end_time?.slice(0, 5) ?? '18:00',
-          break_minutes: l.break_minutes ?? 0,
+          break_minutes: l.break_minutes ?? '',
         })),
       });
     }
@@ -58,15 +65,31 @@ export default function ScheduleForm() {
     else       updateMutation.mutate({ id: Number(id), ...form });
   };
 
-  const addLine = () => setForm(f => ({
-    ...f, lines: [...f.lines, { day_of_week: 'monday', start_time: '09:00', end_time: '18:00', break_minutes: 60 }],
-  }));
+  const addLine = () => {
+    setForm(f => ({
+      ...f, lines: [...f.lines, { day_of_week: 'monday', start_time: '09:00', end_time: '18:00', break_minutes: '' }],
+    }));
+  };
 
-  const updateLine = (i, k, v) => setForm(f => {
-    const lines = [...f.lines];
-    lines[i] = { ...lines[i], [k]: v };
-    return { ...f, lines };
-  });
+  const updateLine = (i, k, v) => {
+    if (k === 'day_of_week') {
+      if (v === 'saturday' || v === 'sunday') {
+        setMessages([`"${v}" is a non-working day and cannot be added.`]);
+        return;
+      }
+      const duplicate = form.lines.some((l, idx) => idx !== i && l.day_of_week === v);
+      if (duplicate) {
+        setMessages([`"${v}" is already in this schedule.`]);
+        return;
+      }
+      setMessages([]);
+    }
+    setForm(f => {
+      const lines = [...f.lines];
+      lines[i] = { ...lines[i], [k]: v };
+      return { ...f, lines };
+    });
+  };
 
   const removeLine = (i) => setForm(f => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }));
 
@@ -104,7 +127,17 @@ export default function ScheduleForm() {
         </div>
       </div>
 
-      {error && <div className="alert alert-danger" style={{ marginBottom: 12 }}>{error}</div>}
+      {error && (
+        <div className="alert alert-warning" style={{ marginBottom: 12 }}>
+          ⚠ Something went wrong while saving. Please check your entries and try again.
+        </div>
+      )}
+
+      {messages.length > 0 && (
+        <div className="alert alert-warning" style={{ marginBottom: 12 }}>
+          {messages.map((msg, i) => <div key={i}>⚠ {msg}</div>)}
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-body">
@@ -162,8 +195,8 @@ export default function ScheduleForm() {
                       : line.end_time}
                   </td>
                   <td>
-                    {editing ? <input className="form-control" type="number" value={line.break_minutes}
-                      onChange={e => updateLine(i, 'break_minutes', Number(e.target.value))} style={{ width: 80 }} />
+                    {editing ? <input className="form-control no-spinner" type="number" value={line.break_minutes ?? ''}
+                      onChange={e => updateLine(i, 'break_minutes', e.target.value === '' ? '' : Number(e.target.value))} style={{ width: 80 }} />
                       : line.break_minutes}
                   </td>
                   <td style={{ fontWeight: 500 }}>{calcHours(line.start_time, line.end_time, line.break_minutes)}</td>
