@@ -10,3 +10,8 @@ export const getAll = async () => {
     const rows = await contractRepo.findAll();
     return rows;
 };
+
+export const getById = async (id) => {
+    const row = await contractRepo.findById(id);
+    return row;
+};
