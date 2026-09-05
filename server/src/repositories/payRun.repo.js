@@ -318,7 +318,7 @@ export const findEligibleEmployees = async ({ start_date, end_date, department_i
         FROM users u
         JOIN contracts c
             ON c.employee_id = u.id
-           AND c.status = 'active'
+           AND c.status IN ('active', 'expired')
            AND c.start_date <= $2
            AND (c.end_date IS NULL OR c.end_date >= $1)
         LEFT JOIN departments d ON d.id = u.department_id

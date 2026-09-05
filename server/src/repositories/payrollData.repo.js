@@ -204,7 +204,7 @@ export const findActiveContractsInPeriod = async (employeeId, startDate, endDate
       c.overtime_policy_id
     FROM contracts c
     WHERE c.employee_id = $1
-      AND c.status = 'active'
+      AND c.status IN ('active', 'expired')
       AND c.start_date <= $3
       AND (c.end_date IS NULL OR c.end_date >= $2)
     ORDER BY c.start_date ASC;
