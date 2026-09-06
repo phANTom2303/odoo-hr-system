@@ -5,12 +5,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAllocationById, createAllocation, approveAllocation, refuseAllocation } from '../../api/allocations';
 import { getEmployees } from '../../api/employees';
 import { getTimeOffTypes } from '../../api/timeOffTypes';
+import { useApp } from '../../context/AppContext';
 
 export default function AllocationForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
   const isNew = id === 'new';
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const [editing, setEditing] = useState(isNew);
   const [form, setForm] = useState({
@@ -83,13 +86,13 @@ export default function AllocationForm() {
           )}
         </div>
         <div className="d-flex gap-2">
-          {!isNew && display.status === 'draft' && (
+          {!isNew && display.status === 'draft' && isHR && (
             <>
               <button className="btn btn-success" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}>Approve</button>
               <button className="btn btn-danger"  onClick={() => refuseMutation.mutate()}  disabled={refuseMutation.isPending}>Refuse</button>
             </>
           )}
-          {isNew && (
+          {isNew && isHR && (
             <>
               <button className="btn btn-secondary" onClick={() => navigate('/timeoff/allocations')}>Cancel</button>
               <button className="btn btn-primary" onClick={save} disabled={createMutation.isPending}>
@@ -105,12 +108,16 @@ export default function AllocationForm() {
           <div className="form-grid">
             <div className="form-group">
               <label>Employee</label>
-              {isNew ? (
+              {isNew && isHR ? (
                 <select className="form-control" value={form.employee_id} onChange={e => setField('employee_id', e.target.value)}>
                   <option value="">Select employee</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                  {employees.map(e => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
                 </select>
-              ) : <input className="form-control" value={display.employee_name ?? ''} disabled />}
+              ) : (
+                <input className="form-control" value={isNew ? currentUser?.name : display.employee_name ?? ''} disabled />
+              )}
             </div>
             <div className="form-group">
               <label>Time Off Type</label>

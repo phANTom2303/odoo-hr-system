@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getLeaveRequestById, createLeaveRequest, approveLeaveRequest, refuseLeaveRequest, withdrawLeaveRequest } from '../../api/leaveRequests';
 import { getEmployees } from '../../api/employees';
 import { getTimeOffTypes } from '../../api/timeOffTypes';
+import { useApp } from '../../context/AppContext';
 
 export default function TimeOffRequestForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
   const isNew = id === 'new';
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const [form, setForm] = useState({
     employee_id: '', time_off_type_id: '',
@@ -18,6 +21,13 @@ export default function TimeOffRequestForm() {
     reason: '', status: 'draft',
   });
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Auto-fill employee for non-HR users — they can only request for themselves
+  useEffect(() => {
+    if (isNew && !isHR && currentUser?.id) {
+      setField('employee_id', currentUser.id);
+    }
+  }, [isNew, isHR, currentUser?.id]);
 
   const { data: req, isLoading } = useQuery({
     queryKey: ['leave-request', id],
@@ -28,6 +38,7 @@ export default function TimeOffRequestForm() {
   const { data: employeesData } = useQuery({
     queryKey: ['employees'],
     queryFn: () => getEmployees().then(r => r.data),
+    enabled: isHR, // only HR can pick any employee
   });
 
   const { data: typesData } = useQuery({
@@ -93,7 +104,7 @@ export default function TimeOffRequestForm() {
           )}
         </div>
         <div className="d-flex gap-2">
-          {!isNew && (display.status === 'draft' || display.status === 'pending') && (
+          {!isNew && (display.status === 'draft' || display.status === 'pending') && isHR && (
             <>
               <button className="btn btn-success" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}>
                 <Check size={14} /> Approve
@@ -103,7 +114,7 @@ export default function TimeOffRequestForm() {
               </button>
             </>
           )}
-          {!isNew && display.status === 'pending' && (
+          {!isNew && display.status === 'pending' && (isHR || display.employee_id === currentUser?.id) && (
             <button className="btn btn-secondary" onClick={() => withdrawMutation.mutate()} disabled={withdrawMutation.isPending}>
               Withdraw
             </button>
@@ -119,17 +130,31 @@ export default function TimeOffRequestForm() {
         </div>
       </div>
 
+      {createMutation.error && (
+        <div className="alert alert-danger" style={{ marginBottom: 12 }}>
+          {createMutation.error.message}
+        </div>
+      )}
+
       <div className="card">
         <div className="card-body">
           <div className="form-grid">
             <div className="form-group">
               <label>Employee</label>
-              {isNew ? (
+              {isNew && isHR ? (
                 <select className="form-control" value={form.employee_id} onChange={e => setField('employee_id', e.target.value)}>
                   <option value="">Select employee</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                  {employees.map(e => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
                 </select>
-              ) : <input className="form-control" value={display.employee_name ?? ''} disabled />}
+              ) : (
+                <input
+                  className="form-control"
+                  value={isNew ? currentUser?.name : display.employee_name ?? ''}
+                  disabled
+                />
+              )}
             </div>
             <div className="form-group">
               <label>Time Off Type</label>

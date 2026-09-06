@@ -7,6 +7,7 @@ import {
   getEmployeeContracts, getEmployeeAttendance,
   getEmployeeTimeOff, getEmployeeAllocations,
 } from '../../api/employees';
+import { useApp } from '../../context/AppContext';
 
 const COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#7c3aed','#be185d','#0f766e','#c2410c'];
 
@@ -14,7 +15,11 @@ export default function EmployeeForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
   const isNew = id === 'new';
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
+  // Employees can view their own profile but not edit others
+  const isOwnProfile = String(currentUser?.id) === String(id);
 
   const [tab, setTab]       = useState('work');
   const [editing, setEditing] = useState(isNew);
@@ -102,7 +107,7 @@ export default function EmployeeForm() {
           </div>
         </div>
         <div className="d-flex gap-2">
-          {!isNew && !editing && (
+          {!isNew && !editing && isHR && (
             <>
               <button className="btn btn-secondary" onClick={() => {
               setForm({
@@ -130,7 +135,7 @@ export default function EmployeeForm() {
               </button>
             </>
           )}
-          {(editing || isNew) && (
+          {(editing || isNew) && isHR && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/employees') : setEditing(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={save} disabled={isPending}>{isPending ? 'Saving…' : 'Save'}</button>

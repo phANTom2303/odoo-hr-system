@@ -1,0 +1,26 @@
+info:
+  name: approve leave request
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: http://localhost:5001/api/leave-requests/1/approve
+  auth: inherit
+
+headers:
+  - name: Content-Type
+    value: application/json
+
+body:
+  mode: json
+  json: |
+    {
+      "approver_id": 2
+    }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

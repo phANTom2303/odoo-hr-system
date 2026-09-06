@@ -46,13 +46,10 @@ function AttendanceWidget() {
   const { currentUser } = useApp();
   const queryClient = useQueryClient();
   const [open, setOpen]       = useState(false);
-  const [elapsed, setElapsed] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const ref = useRef();
 
-  // ── Fetch today's record scoped to the logged-in user ─────────────────────
-  // Key includes currentUser.id so switching accounts never leaks cached data
   const { data: todayRecord } = useQuery({
     queryKey: ['attendance', 'today', currentUser?.id],
     queryFn: () => getTodayAttendance().then(r => r.data ?? null),
@@ -61,46 +58,27 @@ function AttendanceWidget() {
     staleTime: 0,
   });
 
-  // All state is derived purely from the DB record — no manual setState needed
   const checkedIn  = !!(todayRecord?.check_in && !todayRecord?.check_out);
   const checkedOut = !!(todayRecord?.check_in &&  todayRecord?.check_out);
-  const checkInMs  = todayRecord?.check_in  ? new Date(todayRecord.check_in).getTime()  : null;
-  const checkOutMs = todayRecord?.check_out ? new Date(todayRecord.check_out).getTime() : null;
 
-  // Close popup on outside click
+  const fmt = (ts) => ts
+    ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    : '—';
+
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Live elapsed timer — only ticks while actively checked in
-  useEffect(() => {
-    if (!checkedIn || !checkInMs) { setElapsed(''); return; }
-    const tick = () => {
-      const diff = Math.floor((Date.now() - checkInMs) / 1000);
-      const h = Math.floor(diff / 3600);
-      const m = Math.floor((diff % 3600) / 60);
-      const s = diff % 60;
-      setElapsed(
-        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-      );
-    };
-    tick();
-    const iv = setInterval(tick, 1000);
-    return () => clearInterval(iv);
-  }, [checkedIn, checkInMs]);
-
   const handleToggle = async () => {
     setError('');
     setLoading(true);
-    if (!checkedIn) setElapsed('00:00:00');
     try {
       const res = checkedIn ? await checkOutRequest() : await checkInRequest();
       queryClient.setQueryData(['attendance', 'today', currentUser?.id], res.data);
       setOpen(false);
     } catch (err) {
-      if (!checkedIn) setElapsed('');
       setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -108,7 +86,7 @@ function AttendanceWidget() {
   };
 
   const statusLabel = checkedOut ? 'Completed' : checkedIn ? 'Checked In' : 'Not Checked In';
-  const statusColor = checkedOut || !checkedIn ? 'var(--gray-400)' : 'var(--success, #16a34a)';
+  const statusColor = checkedIn ? 'var(--success, #16a34a)' : 'var(--gray-400)';
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -123,34 +101,36 @@ function AttendanceWidget() {
       {open && (
         <div className="att-popup">
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-              Welcome back, {currentUser?.firstName}!
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              {currentUser?.firstName}
             </div>
 
-            {checkedIn && checkInMs && (
-              <div style={{ margin: '8px 0' }}>
-                <div style={{ fontSize: 10, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
-                  Time at work
-                </div>
-                <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--primary)', fontVariantNumeric: 'tabular-nums' }}>
-                  {elapsed}
-                </div>
+            {/* Time rows — always show both, populated from DB */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: 'var(--gray-400)' }}>Check In</span>
+                <span style={{ fontWeight: 600, color: todayRecord?.check_in ? 'var(--gray-700, #374151)' : 'var(--gray-300)' }}>
+                  {fmt(todayRecord?.check_in)}
+                </span>
               </div>
-            )}
-
-            <div style={{ fontSize: 11, color: statusColor, fontWeight: 500, marginBottom: 2 }}>
-              {statusLabel}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: 'var(--gray-400)' }}>Check Out</span>
+                <span style={{ fontWeight: 600, color: todayRecord?.check_out ? 'var(--gray-700, #374151)' : 'var(--gray-300)' }}>
+                  {fmt(todayRecord?.check_out)}
+                </span>
+              </div>
+              {todayRecord?.worked_hours != null && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: 'var(--gray-400)' }}>Worked</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {Number(todayRecord.worked_hours).toFixed(2)} hrs
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>
-              {checkedIn && checkInMs  && `In: ${new Date(checkInMs).toLocaleTimeString()}`}
-              {checkedOut && (
-                <>
-                  {checkInMs  && `In: ${new Date(checkInMs).toLocaleTimeString()}`}
-                  {checkOutMs && <span style={{ marginLeft: 8 }}>{`Out: ${new Date(checkOutMs).toLocaleTimeString()}`}</span>}
-                </>
-              )}
-              {!checkedIn && !checkedOut && 'No activity today yet'}
+            <div style={{ fontSize: 11, color: statusColor, fontWeight: 500 }}>
+              {statusLabel}
             </div>
           </div>
 
@@ -208,8 +188,8 @@ const ROLE_LABELS = {
 export default function Topbar() {
   const { currentUser, logout } = useApp();
   const location = useLocation();
-  const navigate = useNavigate();
   const path = location.pathname;
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const handleLogout = async () => {
     await logout();
@@ -224,16 +204,20 @@ export default function Topbar() {
       <div style={{ fontSize: 12, color: 'var(--gray-300)', marginRight: 8 }}>HR</div>
 
       <nav className="topbar-nav">
-        {['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) ? (
+        {isHR ? (
           <NavItem label="Employees ▾" active={path.startsWith('/employees') || path.startsWith('/schedules') || path.startsWith('/contracts')}
             children={[
-              { label: 'Employees',        to: '/employees' },
-              { label: 'Contracts',        to: '/contracts' },
-              { label: 'Working Schedules',to: '/schedules' },
+              { label: 'Employees',         to: '/employees' },
+              { label: 'Contracts',         to: '/contracts' },
+              { label: 'Working Schedules', to: '/schedules' },
             ]}
           />
         ) : (
-          <NavItem label="My Schedule" to="/schedules" active={path.startsWith('/schedules')} />
+          <NavItem label="My Work" active={path.startsWith('/contracts')}
+            children={[
+              { label: 'My Contract', to: '/contracts' },
+            ]}
+          />
         )}
 
         <NavItem label="Attendance" to="/attendance" active={path.startsWith('/attendance')} />
@@ -242,7 +226,10 @@ export default function Topbar() {
           children={[
             { label: 'Requests',       to: '/timeoff/requests' },
             { label: 'Allocations',    to: '/timeoff/allocations' },
-            ...( (currentUser?.role === 'employee' || currentUser?.role === 'Employee') ? [] : [{ label: 'Time Off Types', to: '/timeoff/types' }] )
+            { label: 'Holidays',       to: '/timeoff/holidays' },
+            ...( isHR ? [
+              { label: 'Time Off Types', to: '/timeoff/types' },
+            ] : [] ),
           ]}
         />
 

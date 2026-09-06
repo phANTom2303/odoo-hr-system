@@ -1,0 +1,26 @@
+info:
+  name: get all leave requests
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://localhost:5001/api/leave-requests
+  auth: inherit
+
+query:
+  - name: employee_id
+    value: '1'
+    enabled: false
+  - name: status
+    value: pending
+    enabled: false
+  - name: time_off_type_id
+    value: '1'
+    enabled: false
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

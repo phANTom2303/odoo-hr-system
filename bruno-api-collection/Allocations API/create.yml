@@ -1,0 +1,30 @@
+info:
+  name: create allocation
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/allocations
+  auth: inherit
+
+headers:
+  - name: Content-Type
+    value: application/json
+
+body:
+  mode: json
+  json: |
+    {
+      "employee_id": 1,
+      "time_off_type_id": 1,
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31",
+      "allocated_amount": 12
+    }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

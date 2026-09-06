@@ -20,3 +20,6 @@ export const approveAllocation = (id, approved_by) =>
 
 export const refuseAllocation = (id) =>
   fetcher(`/allocations/${id}/refuse`, { method: 'POST', body: JSON.stringify({}) });
+
+export const updateAllocation = (id, data) =>
+  fetcher(`/allocations/${id}`, { method: 'PUT', body: JSON.stringify(data) });

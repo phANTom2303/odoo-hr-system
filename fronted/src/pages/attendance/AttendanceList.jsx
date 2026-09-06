@@ -1,19 +1,27 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getAttendance } from '../../api/attendance';
+import { useApp } from '../../context/AppContext';
 
 export default function AttendanceList() {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
   const [params] = useSearchParams();
   const empFilter = params.get('employee');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
 
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
+
+  // Employees only see their own records; HR can filter by any employee
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['attendance', { empFilter, status }],
-    queryFn: () => getAttendance({ employee_id: empFilter || undefined, status: status || undefined }).then(r => r.data),
+    queryKey: ['attendance', { empFilter, status, userId: currentUser?.id }],
+    queryFn: () => getAttendance({
+      employee_id: isHR ? (empFilter || undefined) : currentUser?.id,
+      status: status || undefined,
+    }).then(r => r.data),
   });
 
   const records = data ?? [];
@@ -38,18 +46,17 @@ export default function AttendanceList() {
       <div className="page-header">
         <div>
           <div className="page-breadcrumb">HR ▸ <span>Attendance</span></div>
-          <h1>Attendance</h1>
+          <h1>{isHR ? 'Attendance' : 'My Attendance'}</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/attendance/new')}>
-          <Plus size={15} /> New
-        </button>
       </div>
 
       <div className="toolbar">
-        <div className="search-bar">
-          <Search size={14} color="var(--gray-400)" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search employee…" />
-        </div>
+        {isHR && (
+          <div className="search-bar">
+            <Search size={14} color="var(--gray-400)" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search employee…" />
+          </div>
+        )}
         <select className="filter-select" value={status} onChange={e => setStatus(e.target.value)}>
           <option value="">All Status</option>
           <option value="present">Present</option>
@@ -64,7 +71,7 @@ export default function AttendanceList() {
           <table>
             <thead>
               <tr>
-                <th>Employee</th>
+                {isHR && <th>Employee</th>}
                 <th>Date</th>
                 <th>Check In</th>
                 <th>Check Out</th>
@@ -75,16 +82,16 @@ export default function AttendanceList() {
             <tbody>
               {filtered.map(a => (
                 <tr key={a.id} onClick={() => navigate(`/attendance/${a.id}`)}>
-                  <td style={{ fontWeight: 500 }}>{a.employee_name}</td>
+                  {isHR && <td style={{ fontWeight: 500 }}>{a.employee_name}</td>}
                   <td>{a.date?.slice(0, 10)}</td>
-                  <td>{a.check_in ? new Date(a.check_in).toLocaleTimeString() : '—'}</td>
-                  <td>{a.check_out ? new Date(a.check_out).toLocaleTimeString() : '—'}</td>
-                  <td>{a.worked_hours != null ? Number(a.worked_hours).toFixed(2) : '0.00'}</td>
+                  <td>{a.check_in ? new Date(a.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</td>
+                  <td>{a.check_out ? new Date(a.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</td>
+                  <td>{a.worked_hours != null ? `${Number(a.worked_hours).toFixed(2)} hrs` : '—'}</td>
                   <td><span className={`badge ${statusBadge(a.status)}`}>{a.status}</span></td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No records found.</td></tr>
+                <tr><td colSpan={isHR ? 6 : 5} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No records found.</td></tr>
               )}
             </tbody>
           </table>

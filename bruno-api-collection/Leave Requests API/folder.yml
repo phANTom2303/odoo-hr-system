@@ -1,0 +1,7 @@
+info:
+  name: Leave Requests API
+  type: folder
+  seq: 14
+
+request:
+  auth: inherit
