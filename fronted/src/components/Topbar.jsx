@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Clock, LogOut, User, ChevronDown } from 'lucide-react';
+import { Clock, LogOut, ChevronDown } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getTodayAttendance, checkInRequest, checkOutRequest, resetTodayRequest } from '../api/attendance';
 
 function NavItem({ label, to, children, active }) {
   const [open, setOpen] = useState(false);
@@ -41,73 +43,153 @@ function NavItem({ label, to, children, active }) {
 }
 
 function AttendanceWidget() {
-  const { checkedIn, setCheckedIn, checkInTime, setCheckInTime, currentUser } = useApp();
-  const [open, setOpen] = useState(false);
+  const { currentUser } = useApp();
+  const queryClient = useQueryClient();
+  const [open, setOpen]       = useState(false);
   const [elapsed, setElapsed] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
   const ref = useRef();
 
+  // ── Fetch today's record scoped to the logged-in user ─────────────────────
+  // Key includes currentUser.id so switching accounts never leaks cached data
+  const { data: todayRecord } = useQuery({
+    queryKey: ['attendance', 'today', currentUser?.id],
+    queryFn: () => getTodayAttendance().then(r => r.data ?? null),
+    enabled: !!currentUser?.id,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+
+  // All state is derived purely from the DB record — no manual setState needed
+  const checkedIn  = !!(todayRecord?.check_in && !todayRecord?.check_out);
+  const checkedOut = !!(todayRecord?.check_in &&  todayRecord?.check_out);
+  const checkInMs  = todayRecord?.check_in  ? new Date(todayRecord.check_in).getTime()  : null;
+  const checkOutMs = todayRecord?.check_out ? new Date(todayRecord.check_out).getTime() : null;
+
+  // Close popup on outside click
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Live elapsed timer — only ticks while actively checked in
   useEffect(() => {
-    if (!checkedIn || !checkInTime) { setElapsed(''); return; }
-    const iv = setInterval(() => {
-      const diff = Math.floor((Date.now() - checkInTime) / 1000);
+    if (!checkedIn || !checkInMs) { setElapsed(''); return; }
+    const tick = () => {
+      const diff = Math.floor((Date.now() - checkInMs) / 1000);
       const h = Math.floor(diff / 3600);
       const m = Math.floor((diff % 3600) / 60);
       const s = diff % 60;
-      setElapsed(`${h}h ${m}m ${s}s`);
-    }, 1000);
+      setElapsed(
+        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      );
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, [checkedIn, checkInTime]);
+  }, [checkedIn, checkInMs]);
 
-  const toggle = () => {
-    if (!checkedIn) {
-      setCheckedIn(true);
-      setCheckInTime(Date.now());
-    } else {
-      setCheckedIn(false);
-      setCheckInTime(null);
+  const handleToggle = async () => {
+    setError('');
+    setLoading(true);
+    if (!checkedIn) setElapsed('00:00:00');
+    try {
+      const res = checkedIn ? await checkOutRequest() : await checkInRequest();
+      queryClient.setQueryData(['attendance', 'today', currentUser?.id], res.data);
+      setOpen(false);
+    } catch (err) {
+      if (!checkedIn) setElapsed('');
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setOpen(false);
   };
+
+  const statusLabel = checkedOut ? 'Completed' : checkedIn ? 'Checked In' : 'Not Checked In';
+  const statusColor = checkedOut || !checkedIn ? 'var(--gray-400)' : 'var(--success, #16a34a)';
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         className={`att-widget-btn ${checkedIn ? 'checked-in' : 'checked-out'}`}
-        onClick={() => setOpen(o => !o)}
-        title="Attendance"
+        onClick={() => { setOpen(o => !o); setError(''); }}
+        title={statusLabel}
       >
         <Clock size={15} />
       </button>
+
       {open && (
         <div className="att-popup">
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-              Welcome back, {currentUser?.name?.split(' ')[0]}!
+              Welcome back, {currentUser?.firstName}!
             </div>
-            {checkedIn && checkInTime && (
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)', margin: '8px 0' }}>
-                {elapsed}
+
+            {checkedIn && checkInMs && (
+              <div style={{ margin: '8px 0' }}>
+                <div style={{ fontSize: 10, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+                  Time at work
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--primary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {elapsed}
+                </div>
               </div>
             )}
+
+            <div style={{ fontSize: 11, color: statusColor, fontWeight: 500, marginBottom: 2 }}>
+              {statusLabel}
+            </div>
+
             <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>
-              {checkedIn
-                ? `Checked in at ${new Date(checkInTime).toLocaleTimeString()}`
-                : 'Not checked in'}
+              {checkedIn && checkInMs  && `In: ${new Date(checkInMs).toLocaleTimeString()}`}
+              {checkedOut && (
+                <>
+                  {checkInMs  && `In: ${new Date(checkInMs).toLocaleTimeString()}`}
+                  {checkOutMs && <span style={{ marginLeft: 8 }}>{`Out: ${new Date(checkOutMs).toLocaleTimeString()}`}</span>}
+                </>
+              )}
+              {!checkedIn && !checkedOut && 'No activity today yet'}
             </div>
           </div>
-          <button
-            className={`btn w-full ${checkedIn ? 'btn-danger' : 'btn-success'}`}
-            style={{ justifyContent: 'center' }}
-            onClick={toggle}
-          >
-            {checkedIn ? 'Check Out' : 'Check In'}
-          </button>
+
+          {error && (
+            <div style={{ fontSize: 12, color: 'var(--danger, #ef4444)', background: 'var(--danger-light, #fef2f2)', borderRadius: 6, padding: '6px 10px', marginBottom: 10, textAlign: 'center' }}>
+              {error}
+            </div>
+          )}
+
+          {checkedOut ? (
+            <>
+              <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--gray-500)', padding: '8px 0' }}>
+                Attendance complete for today.
+              </div>
+              {import.meta.env.DEV && (
+                <button
+                  className="btn w-full btn-ghost btn-sm"
+                  style={{ justifyContent: 'center', marginTop: 4, fontSize: 11, color: 'var(--gray-400)' }}
+                  onClick={async () => {
+                    const res = await resetTodayRequest();
+                    queryClient.setQueryData(['attendance', 'today', currentUser?.id], res.data);
+                  }}
+                >
+                  ↺ Reset for testing
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              className={`btn w-full ${checkedIn ? 'btn-danger' : 'btn-success'}`}
+              style={{ justifyContent: 'center' }}
+              onClick={handleToggle}
+              disabled={loading}
+            >
+              {loading
+                ? (checkedIn ? 'Checking out…' : 'Checking in…')
+                : (checkedIn ? 'Check Out' : 'Check In')}
+            </button>
+          )}
         </div>
       )}
     </div>

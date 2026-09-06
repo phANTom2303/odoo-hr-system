@@ -21,6 +21,9 @@ import salaryStructureRouter from '#routes/salaryStructure.routes.js';
 import salaryRuleRouter      from '#routes/salaryRule.routes.js';
 import payRunRouter          from '#routes/payRun.routes.js';
 import payslipRouter         from '#routes/payslip.routes.js';
+import attendanceRouter      from '#routes/attendance.routes.js';
+import allocationRouter      from '#routes/allocation.routes.js';
+import leaveRequestRouter    from '#routes/leaveRequest.routes.js';
 
 const app = express();
 
@@ -47,6 +50,9 @@ app.use('/api/time-off-types',    timeOffTypeRouter);
 app.use('/api/holidays',          holidayRouter);
 app.use('/api/salary-structures', salaryStructureRouter);
 app.use('/api/salary-rules',      salaryRuleRouter);
+app.use('/api/attendance',        attendanceRouter);
+app.use('/api/allocations',       allocationRouter);
+app.use('/api/leave-requests',    leaveRequestRouter);
 app.use('/api/pay-runs',          payRunRouter);
 app.use('/api/payslips',          payslipRouter);
 

@@ -1,44 +1,30 @@
-import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useQuery } from '@tanstack/react-query';
+import { getAttendanceById } from '../../api/attendance';
 
 export default function AttendanceForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { attendanceRecords, setAttendanceRecords, employees } = useApp();
-
   const isNew = id === 'new';
-  const existing = isNew ? null : attendanceRecords.find(a => a.id === Number(id));
 
-  const [form, setForm] = useState(existing || {
-    employeeId: '', employeeName: '', department: '', manager: '',
-    checkIn: '', checkOut: '', workedHours: 0, overtime: 0, status: 'Present', notes: '',
+  const { data, isLoading } = useQuery({
+    queryKey: ['attendance', id],
+    queryFn: () => getAttendanceById(id).then(r => r.data),
+    enabled: !isNew,
   });
-  const [editing, setEditing] = useState(isNew);
 
-  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const save = () => {
-    if (isNew) {
-      const emp = employees.find(e => e.id === Number(form.employeeId));
-      const newRec = { ...form, id: Date.now(), employeeName: emp?.name || '', department: emp?.department || '', manager: emp?.manager || '' };
-      setAttendanceRecords(prev => [...prev, newRec]);
-      navigate('/attendance');
-    } else {
-      setAttendanceRecords(prev => prev.map(a => a.id === Number(id) ? { ...a, ...form } : a));
-      setEditing(false);
-    }
-  };
-
-  if (!isNew && !existing) return <div><p>Record not found.</p></div>;
+  const rec = data ?? {};
 
   const statusBadge = (s) => {
-    if (s === 'Present') return 'badge-green';
-    if (s === 'Absent')  return 'badge-red';
-    if (s === 'Late')    return 'badge-yellow';
+    if (s === 'present')  return 'badge-green';
+    if (s === 'absent')   return 'badge-red';
+    if (s === 'on_leave') return 'badge-yellow';
+    if (s === 'holiday')  return 'badge-blue';
     return 'badge-gray';
   };
+
+  if (!isNew && isLoading) return <div><p>Loading…</p></div>;
 
   return (
     <div>
@@ -46,21 +32,14 @@ export default function AttendanceForm() {
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/attendance')}>
           <ArrowLeft size={14} /> Attendance
         </button>
-        <span> / {isNew ? 'New Record' : `${form.employeeName} / ${form.checkIn?.slice(0, 10) || ''}`}</span>
+        <span> / {isNew ? 'New Record' : `${rec.employee_name} / ${rec.date?.slice(0, 10) || ''}`}</span>
       </div>
 
       <div className="page-header">
         <div>
-          <h1>{isNew ? 'New Attendance' : `Attendance / ${form.employeeName}`}</h1>
-          {!isNew && <span className={`badge ${statusBadge(form.status)}`} style={{ marginTop: 4 }}>{form.status}</span>}
-        </div>
-        <div className="d-flex gap-2">
-          {!isNew && !editing && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
-          {(editing || isNew) && (
-            <>
-              <button className="btn btn-secondary" onClick={() => isNew ? navigate('/attendance') : setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>Save</button>
-            </>
+          <h1>{isNew ? 'New Attendance' : `Attendance — ${rec.employee_name}`}</h1>
+          {!isNew && rec.status && (
+            <span className={`badge ${statusBadge(rec.status)}`} style={{ marginTop: 4 }}>{rec.status}</span>
           )}
         </div>
       </div>
@@ -70,51 +49,39 @@ export default function AttendanceForm() {
           <div className="form-grid">
             <div className="form-group">
               <label>Employee</label>
-              {isNew ? (
-                <select className="form-control" value={form.employeeId} onChange={e => setField('employeeId', e.target.value)}>
-                  <option value="">Select employee</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
-              ) : (
-                <input className="form-control" value={form.employeeName} disabled />
-              )}
+              <input className="form-control" value={rec.employee_name ?? ''} disabled />
             </div>
             <div className="form-group">
               <label>Department</label>
-              <input className="form-control" value={form.department} disabled />
+              <input className="form-control" value={rec.department_name ?? ''} disabled />
             </div>
             <div className="form-group">
-              <label>Check In</label>
-              <input className="form-control" type="datetime-local" value={form.checkIn?.replace(' ', 'T') || ''} disabled={!editing}
-                onChange={e => setField('checkIn', e.target.value.replace('T', ' '))} />
-            </div>
-            <div className="form-group">
-              <label>Check Out</label>
-              <input className="form-control" type="datetime-local" value={form.checkOut?.replace(' ', 'T') || ''} disabled={!editing}
-                onChange={e => setField('checkOut', e.target.value.replace('T', ' '))} />
-            </div>
-            <div className="form-group">
-              <label>Worked Hours</label>
-              <input className="form-control" type="number" value={form.workedHours} disabled={!editing} onChange={e => setField('workedHours', parseFloat(e.target.value))} />
-            </div>
-            <div className="form-group">
-              <label>Overtime</label>
-              <input className="form-control" type="number" value={form.overtime} disabled={!editing} onChange={e => setField('overtime', parseFloat(e.target.value))} />
+              <label>Date</label>
+              <input className="form-control" value={rec.date?.slice(0, 10) ?? ''} disabled />
             </div>
             <div className="form-group">
               <label>Status</label>
-              <select className="form-control" value={form.status} disabled={!editing} onChange={e => setField('status', e.target.value)}>
-                <option>Present</option><option>Absent</option><option>Late</option>
-              </select>
+              <input className="form-control" value={rec.status ?? ''} disabled />
             </div>
             <div className="form-group">
-              <label>Manager</label>
-              <input className="form-control" value={form.manager} disabled />
+              <label>Check In</label>
+              <input className="form-control" value={rec.check_in ? new Date(rec.check_in).toLocaleString() : '—'} disabled />
             </div>
-            <div className="form-group span-2">
-              <label>Notes</label>
-              <textarea className="form-control" value={form.notes} disabled={!editing} onChange={e => setField('notes', e.target.value)}
-                placeholder="System-generated from check in/out or manually corrected by an authorized user." />
+            <div className="form-group">
+              <label>Check Out</label>
+              <input className="form-control" value={rec.check_out ? new Date(rec.check_out).toLocaleString() : '—'} disabled />
+            </div>
+            <div className="form-group">
+              <label>Worked Hours</label>
+              <input className="form-control" value={rec.worked_hours != null ? Number(rec.worked_hours).toFixed(2) : '—'} disabled />
+            </div>
+            <div className="form-group">
+              <label>Overtime Hours</label>
+              <input className="form-control" value={rec.overtime_hours != null ? Number(rec.overtime_hours).toFixed(2) : '0.00'} disabled />
+            </div>
+            <div className="form-group">
+              <label>Manual Edit</label>
+              <input className="form-control" value={rec.is_manual_edit ? 'Yes' : 'No'} disabled />
             </div>
           </div>
         </div>

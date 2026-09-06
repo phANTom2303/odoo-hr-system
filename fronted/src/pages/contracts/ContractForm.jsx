@@ -2,19 +2,27 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useApp } from '../../context/AppContext';
 import { getContractById, createContract, updateContract } from '../../api/contracts';
+import { getEmployees } from '../../api/employees';
+import { getSchedules } from '../../api/schedules';
+import { getSalaryStructures } from '../../api/salary';
 
 export default function ContractForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { employees, schedules, salaryStructures } = useApp();
 
   const isNew = id === 'new';
 
+  const { data: employeesRes } = useQuery({ queryKey: ['employees'], queryFn: () => getEmployees().then(r => r.data) });
+  const { data: schedulesRes } = useQuery({ queryKey: ['schedules'],  queryFn: () => getSchedules().then(r => r.data) });
+  const { data: structuresRes } = useQuery({ queryKey: ['salary-structures'], queryFn: () => getSalaryStructures().then(r => r.data) });
+
+  const employees        = employeesRes  ?? [];
+  const schedules        = schedulesRes  ?? [];
+  const salaryStructures = structuresRes ?? [];
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['contract', id],
     queryFn: () => getContractById(id),
     enabled: !isNew,
   });
@@ -24,7 +32,7 @@ export default function ContractForm() {
   const [form, setForm] = useState({
     ref: '', employeeId: '', employeeName: '', department: '', jobPosition: '',
     startDate: '', endDate: '', wage: '', status: 'Draft',
-    schedule: '', structure: 'Employee Salary',
+    scheduleId: '', schedule: '', structureId: '', structure: '',
   });
   const [editing, setEditing] = useState(isNew);
 
@@ -67,17 +75,17 @@ export default function ContractForm() {
 
   const save = () => {
     const uiStatusToDB = { 'Draft': 'draft', 'Running': 'active', 'Expired': 'expired', 'Cancelled': 'cancelled' };
-    
+
     let dataToSave;
     if (isNew) {
       dataToSave = {
-        employee_id: Number(form.employeeId),
-        wage: Number(form.wage),
-        start_date: form.startDate,
-        end_date: form.endDate || null,
-        status: uiStatusToDB[form.status] || 'draft',
-        schedule_id: 1, 
-        salary_structure_id: 1, 
+        employee_id:          Number(form.employeeId),
+        wage:                 Number(form.wage),
+        start_date:           form.startDate,
+        end_date:             form.endDate || null,
+        status:               uiStatusToDB[form.status] || 'draft',
+        schedule_id:          Number(form.scheduleId) || null,
+        salary_structure_id:  Number(form.structureId) || null,
       };
     } else {
       dataToSave = {
@@ -88,7 +96,7 @@ export default function ContractForm() {
         status: uiStatusToDB[form.status] || 'draft',
       };
     }
-    
+
     mutation.mutate(dataToSave);
   };
 
@@ -136,10 +144,10 @@ export default function ContractForm() {
               {isNew ? (
                 <select className="form-control" value={form.employeeId} onChange={e => {
                   const emp = employees.find(em => em.id === Number(e.target.value));
-                  setForm(f => ({ ...f, employeeId: e.target.value, department: emp?.department || '', jobPosition: emp?.jobTitle || '' }));
+                  setForm(f => ({ ...f, employeeId: e.target.value, department: emp?.department_name || '', jobPosition: emp?.job_position_title || '' }));
                 }}>
                   <option value="">Select employee</option>
-                  {employees.map(em => <option key={em.id} value={em.id}>{em.name}</option>)}
+                  {employees.map(em => <option key={em.id} value={em.id}>{em.first_name} {em.last_name}</option>)}
                 </select>
               ) : (
                 <input className="form-control" value={form.employeeName} disabled />
@@ -173,22 +181,30 @@ export default function ContractForm() {
             </div>
             <div className="form-group">
               <label>Working Schedule</label>
-              <select className="form-control" value={form.schedule} disabled={!editing} onChange={e => setField('schedule', e.target.value)}>
-                <option value="">— Select —</option>
-                {!isNew && !schedules.find(s => s.name === form.schedule) && <option value={form.schedule}>{form.schedule}</option>}
-                {schedules.map(s => <option key={s.id}>{s.name}</option>)}
-              </select>
+              {isNew ? (
+                <select className="form-control" value={form.scheduleId} onChange={e => {
+                  const s = schedules.find(sc => sc.id === Number(e.target.value));
+                  setForm(f => ({ ...f, scheduleId: e.target.value, schedule: s?.name || '' }));
+                }}>
+                  <option value="">— Select —</option>
+                  {schedules.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              ) : (
+                <input className="form-control" value={form.schedule} disabled />
+              )}
             </div>
-          </div>
-          <div className="divider" />
-          <div className="form-group">
-            <label>Salary Structure / Notes</label>
-            <div style={{ padding: '10px 14px', background: 'var(--gray-50)', borderRadius: 8, fontSize: 13 }}>
-              <strong>Structure Type:</strong> {form.structure}
-              {form.status === 'Running' && (
-                <div style={{ marginTop: 4, color: 'var(--gray-500)', fontSize: 12 }}>
-                  This running contract is the source for payroll calculation in the active period.
-                </div>
+            <div className="form-group">
+              <label>Salary Structure</label>
+              {isNew ? (
+                <select className="form-control" value={form.structureId} onChange={e => {
+                  const s = salaryStructures.find(ss => ss.id === Number(e.target.value));
+                  setForm(f => ({ ...f, structureId: e.target.value, structure: s?.name || '' }));
+                }}>
+                  <option value="">— Select —</option>
+                  {salaryStructures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              ) : (
+                <input className="form-control" value={form.structure} disabled />
               )}
             </div>
           </div>

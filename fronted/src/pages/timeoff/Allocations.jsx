@@ -1,36 +1,52 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Check } from 'lucide-react';
-import { useApp, useAuth } from '../../context/AppContext';
+import { Plus, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAllocations, approveAllocation, refuseAllocation } from '../../api/allocations';
 
 export default function Allocations() {
-  const { allocations, approveAllocation } = useApp();
-  const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const empFilter = params.get('employee');
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const empFilter = searchParams.get('employee');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
-  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['allocations', { empFilter, statusFilter }],
+    queryFn: () => getAllocations({
+      employee_id: empFilter || undefined,
+      status: statusFilter || undefined,
+    }).then(r => r.data),
+  });
 
-  // TODO: The backend should ideally filter allocations for the Employee role.
-  const allowedAllocations = isEmployeeOnly && currentUser?.employeeId
-    ? allocations.filter(a => a.employeeId === currentUser.employeeId)
-    : allocations;
+  const allocations = data ?? [];
 
-  const filtered = allowedAllocations.filter(a => {
-    const matchEmp = empFilter ? a.employeeId === Number(empFilter) : true;
-    const matchSearch = a.employeeName.toLowerCase().includes(search.toLowerCase()) ||
-      a.typeName.toLowerCase().includes(search.toLowerCase());
-    return matchEmp && matchSearch;
+  const filtered = allocations.filter(a =>
+    a.employee_name?.toLowerCase().includes(search.toLowerCase()) ||
+    a.time_off_type_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const approveMutation = useMutation({
+    mutationFn: (id) => approveAllocation(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocations'] }),
+  });
+
+  const refuseMutation = useMutation({
+    mutationFn: (id) => refuseAllocation(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocations'] }),
   });
 
   const statusBadge = (s) => {
-    if (s === 'Approved')   return 'badge-green';
-    if (s === 'To Approve') return 'badge-yellow';
-    if (s === 'Refused')    return 'badge-red';
+    if (s === 'approved') return 'badge-green';
+    if (s === 'draft')    return 'badge-yellow';
+    if (s === 'refused')  return 'badge-red';
+    if (s === 'expired')  return 'badge-gray';
     return 'badge-gray';
   };
+
+  if (isLoading) return <div className="page-header"><p>Loading allocations…</p></div>;
+  if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load allocations.</p></div>;
 
   return (
     <div>
@@ -39,11 +55,9 @@ export default function Allocations() {
           <div className="page-breadcrumb">Time Off ▸ <span>Allocations</span></div>
           <h1>Allocations</h1>
         </div>
-        {!isEmployeeOnly && (
-          <button className="btn btn-primary" onClick={() => navigate('/timeoff/allocations/new')}>
-            <Plus size={15} /> New
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={() => navigate('/timeoff/allocations/new')}>
+          <Plus size={15} /> New
+        </button>
       </div>
 
       <div className="toolbar">
@@ -51,6 +65,13 @@ export default function Allocations() {
           <Search size={14} color="var(--gray-400)" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search allocations…" />
         </div>
+        <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="approved">Approved</option>
+          <option value="refused">Refused</option>
+          <option value="expired">Expired</option>
+        </select>
       </div>
 
       <div className="card">
@@ -63,6 +84,8 @@ export default function Allocations() {
                 <th>Allocated</th>
                 <th>Taken</th>
                 <th>Remaining</th>
+                <th>Valid From</th>
+                <th>Valid To</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -70,28 +93,35 @@ export default function Allocations() {
             <tbody>
               {filtered.map(a => (
                 <tr key={a.id}>
-                  <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.employeeName}</td>
-                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.typeName}</td>
-                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.allocated} days</td>
-                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.taken} days</td>
-                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)} style={{ fontWeight: 600, color: a.remaining > 5 ? 'var(--success)' : 'var(--warning)' }}>
-                    {a.remaining} days
+                  <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.employee_name}</td>
+                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.time_off_type_name}</td>
+                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.allocated_amount} {a.time_off_unit}</td>
+                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.taken} {a.time_off_unit}</td>
+                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}
+                    style={{ fontWeight: 600, color: Number(a.remaining) > 3 ? 'var(--success)' : 'var(--warning)' }}>
+                    {a.remaining} {a.time_off_unit}
                   </td>
+                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.start_date?.slice(0, 10)}</td>
+                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.end_date?.slice(0, 10)}</td>
                   <td><span className={`badge ${statusBadge(a.status)}`}>{a.status}</span></td>
                   <td>
-                    {!isEmployeeOnly && a.status === 'To Approve' && (
-                      <button className="btn btn-success btn-sm" onClick={() => approveAllocation(a.id)}>
-                        <Check size={12} /> Approve
-                      </button>
+                    {a.status === 'draft' && (
+                      <div className="d-flex gap-2">
+                        <button className="btn btn-success btn-sm" onClick={() => approveMutation.mutate(a.id)}>Approve</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => refuseMutation.mutate(a.id)}>Refuse</button>
+                      </div>
                     )}
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No allocations found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
         <div style={{ padding: '10px 20px', fontSize: 12, color: 'var(--gray-400)' }}>
-          Approved allocation creates available leave balance for the employee.
+          Approved allocations create available leave balance for employees.
         </div>
       </div>
     </div>
