@@ -15,6 +15,7 @@
 | Proration factor no longer deducts unpaid leaves or holidays | **Bug fix:** v1.0 double-counted unpaid leave (once in proration, once in deduction line). Proration is now a pure calendar fraction. |
 | Added Phase 5B: Overtime Pay Calculation [P2] | v1.0 had no overtime-to-pay flow despite schema support |
 | Unpaid leave deduction (Phase 6) is now the **sole** mechanism for unpaid leave salary reduction | Proration only handles multi-contract segment splitting |
+| Phase 5A now persists `category = 'deduction'` lines as **negative** | **Bug fix:** v2.0 emitted rule-driven deductions (PF, PT) positive while `UNPAID_LV` was negative, so summing deduction lines gave a wrong figure. Aggregates were always correct (Phase 7 uses `ABS`); only the line sign was inconsistent. |
 
 ---
 
@@ -380,7 +381,18 @@ FOR each rule R in rules (ordered by sequence ASC):
   IF R.code IN ('GROSS', 'NET'):
     amount = 0.00
 
+  -- computed_values holds the UNSIGNED magnitude on purpose: a percentage rule
+  -- based on a deduction (e.g. "5% of PF") must compute off its face value.
   computed_values[R.id] = amount
+
+  -- Deduction lines are PERSISTED NEGATIVE so every reduction on a payslip
+  -- carries one consistent sign — the synthetic UNPAID_LV line (Phase 6) and
+  -- any future deduction line included. Phase 7 sums deductions with ABS(),
+  -- so the aggregates are unaffected by this sign.
+  IF R.category == 'deduction':
+    signed_amount = -ABS(amount)
+  ELSE:
+    signed_amount = amount
 
   segment_lines.append({
     rule_id:          R.id,
@@ -388,7 +400,7 @@ FOR each rule R in rules (ordered by sequence ASC):
     rule_name:        R.name,       -- SNAPSHOT: copied from rule at compute time
     category:         R.category,   -- SNAPSHOT
     sequence:         R.sequence,
-    amount:           amount,
+    amount:           signed_amount,   -- NEGATIVE for category = 'deduction'
     contract_id:      S.contract.id,
     segment_start:    S.start,
     segment_end:      S.end,
@@ -998,8 +1010,8 @@ POST /pay-runs/:id/compute
    │   ├─ BASIC (fixed)      → wage × proration_factor
    │   ├─ HRA   (% of BASIC) → BASIC_amount × 40%
    │   ├─ CONV  (fixed)      → 1600 × proration_factor
-   │   ├─ PF    (% of BASIC) → BASIC_amount × 12%    [deduction]
-   │   ├─ PT    (fixed)      → 200 × proration_factor [deduction]
+   │   ├─ PF    (% of BASIC) → BASIC_amount × 12%    [deduction → stored −ve]
+   │   ├─ PT    (fixed)      → 200 × proration_factor [deduction → stored −ve]
    │   ├─ GROSS (placeholder)→ 0 (updated in Phase 7)
    │   └─ NET   (placeholder)→ 0 (updated in Phase 7)
    │

@@ -1,0 +1,33 @@
+info:
+  name: get payslips
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://localhost:5001/api/payslips
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    The dedicated Payslips list view.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    Optional query params:
+      • pay_run_id  — payslips of one run
+      • employee_id — payroll history for one employee
+      • status      — draft | computed | validated | paid | cancelled
+
+    Rows carry employee_name, pay_run_name, structure_name and the period
+    dates alongside the aggregates, so the list renders without follow-ups.
+
+    Example: http://localhost:5001/api/payslips?pay_run_id=1
+    Example: http://localhost:5001/api/payslips?employee_id=3&status=paid
+
+    Empty until a pay run has been computed.

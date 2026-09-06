@@ -1,0 +1,44 @@
+info:
+  name: compute pay run
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: http://localhost:5001/api/pay-runs/12/compute
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    THE payroll engine. Generates a payslip (and its snapshot lines) for
+    every selected employee, then moves the run to "computed".
+
+    Roles: admin, hr_payroll_manager  (NOT hr_payroll_user)
+
+    Requires status "draft" — 409 "Pay run is not in draft state" otherwise,
+    so this is not re-runnable once it has succeeded. Create a new run to
+    compute again.
+    409 as well when the salary structure has since been set inactive.
+
+    Per employee it resolves the contract(s) overlapping the period, prorates
+    across segments on a mid-period contract change, runs the structure's
+    salary rules in sequence order, adds overtime pay and the unpaid-leave
+    deduction, then stores the aggregates plus a warnings array.
+
+    On success: 200 { success: true, data: { payslips_generated, total_gross,
+    total_net, total_deductions, warning_counts: { error, warning, info },
+    payslips: [...] } }
+
+    Warnings never stop computation — a payslip is always produced, even for
+    an employee with no active contract (zeroed, contract_id null). But any
+    error-severity warning blocks /validate until that payslip is reviewed.
+
+    Against the seed data for Sep 2026, Rahul (3) yields exactly:
+      BASIC 80000.00 · HRA 32000.00 · CONV 1600.00 · GROSS 113600.00
+      PF -9600.00 · PT -200.00 · NET 103800.00
+      gross 113600.00 / deductions 9800.00 / net 103800.00

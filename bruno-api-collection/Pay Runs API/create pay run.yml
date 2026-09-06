@@ -1,0 +1,50 @@
+info:
+  name: create pay run
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: http://localhost:5001/api/pay-runs
+  body:
+    type: json
+    data: |2
+          {
+            "name": "September 2026 Payroll",
+            "salary_structure_id": 1,
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-30",
+            "employee_ids": [1, 2, 3]
+          }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    Creates the pay run in "draft" and attaches the selected employees.
+    This is the wizard's "Create Payrun" action.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    Required body:
+      • salary_structure_id — must exist and be "active" (409 if inactive)
+      • start_date, end_date — YYYY-MM-DD, end_date >= start_date
+      • employee_ids — non-empty array of positive integers; duplicates are
+                       silently de-duplicated
+
+    Optional body:
+      • name — defaults to PR/YYYY/MMM derived from start_date
+               (2026-09-01 → "PR/2026/SEP")
+
+    On success: 201 { success: true, data: { id, name, status: "draft", ... } }
+
+    Note the returned id — the compute / validate / mark-paid requests below
+    are written against id 1; update them to match.
+
+    Add 4 to employee_ids to demo the NO_ACTIVE_CONTRACT error warning:
+    Neha has no active contract in Sep 2026, so she gets a zeroed payslip
+    that blocks validation until reviewed.

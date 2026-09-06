@@ -1,0 +1,29 @@
+info:
+  name: mark pay run paid
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: http://localhost:5001/api/pay-runs/1/mark-paid
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    Final step: marks the run and all its payslips "paid".
+
+    Roles: admin, hr_payroll_manager
+
+    Requires status "validated" — 409 otherwise.
+
+    On success: 200 { success: true, data: { status: "paid", paid_at,
+    payslips_updated } }
+
+    Terminal state. A paid run is history: it can no longer be recomputed,
+    updated or deleted. Paid payslips also stop counting toward the
+    DUPLICATE_PAYSLIP check on future runs for the same period.

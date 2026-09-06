@@ -1,0 +1,30 @@
+info:
+  name: get pay run by id
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: http://localhost:5001/api/pay-runs/1
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |2
+    The Payrun processing screen: the run plus a summary row per payslip.
+
+    Roles: admin, hr_payroll_manager, hr_payroll_user
+
+    On success: 200 { success: true, data: { ...run, payslips: [...] } }
+    Each payslips[] entry carries employee_name, department_name,
+    gross_salary, net_salary, total_deductions, worked_days, worked_hours,
+    status, is_reviewed and the warnings array — everything the processing
+    screen needs to flag problems before validation.
+
+    Before /compute the payslips array is empty.
+
+    404 when the pay run does not exist.
