@@ -9,14 +9,16 @@ export default function TimeOffRequests() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const empFilter = searchParams.get('employee');
+  const typeFilter = searchParams.get('time_off_type_id');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['leave-requests', { empFilter, statusFilter }],
+    queryKey: ['leave-requests', { empFilter, statusFilter, typeFilter }],
     queryFn: () => getLeaveRequests({
       employee_id: empFilter || undefined,
       status: statusFilter || undefined,
+      time_off_type_id: typeFilter || undefined,
     }).then(r => r.data),
   });
 

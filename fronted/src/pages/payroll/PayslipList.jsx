@@ -10,8 +10,9 @@ export default function PayslipList() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const payRunId = params.get('pay_run_id');
+  const statusParam = params.get('status');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(statusParam || '');
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['payslips', { payRunId, status }],
