@@ -3,20 +3,25 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Check, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getLeaveRequests, approveLeaveRequest, refuseLeaveRequest } from '../../api/leaveRequests';
+import { useApp } from '../../context/AppContext';
 
 export default function TimeOffRequests() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
   const [searchParams] = useSearchParams();
   const empFilter = searchParams.get('employee');
   const typeFilter = searchParams.get('time_off_type_id');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
 
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
+
+  // Employees only see their own requests
   const { data, isLoading, isError } = useQuery({
     queryKey: ['leave-requests', { empFilter, statusFilter, typeFilter }],
     queryFn: () => getLeaveRequests({
-      employee_id: empFilter || undefined,
+      employee_id: isHR ? (empFilter || undefined) : currentUser?.id,
       status: statusFilter || undefined,
       time_off_type_id: typeFilter || undefined,
     }).then(r => r.data),
@@ -63,10 +68,12 @@ export default function TimeOffRequests() {
       </div>
 
       <div className="toolbar">
-        <div className="search-bar">
-          <Search size={14} color="var(--gray-400)" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests…" />
-        </div>
+        {isHR && (
+          <div className="search-bar">
+            <Search size={14} color="var(--gray-400)" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests…" />
+          </div>
+        )}
         <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">All Status</option>
           <option value="draft">Draft</option>
@@ -82,40 +89,42 @@ export default function TimeOffRequests() {
           <table>
             <thead>
               <tr>
-                <th>Employee</th>
+                {isHR && <th>Employee</th>}
                 <th>Type</th>
                 <th>Start</th>
                 <th>End</th>
                 <th>Days</th>
                 <th>Status</th>
-                <th>Actions</th>
+                {isHR && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map(r => (
                 <tr key={r.id}>
-                  <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.employee_name}</td>
+                  {isHR && <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.employee_name}</td>}
                   <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.time_off_type_name}</td>
                   <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.start_date?.slice(0, 10)}</td>
                   <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.end_date?.slice(0, 10)}</td>
                   <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.number_of_days ?? '—'}</td>
                   <td><span className={`badge ${statusBadge(r.status)}`}>{r.status}</span></td>
-                  <td>
-                    {(r.status === 'draft' || r.status === 'pending') && (
-                      <div className="d-flex gap-2">
-                        <button className="btn btn-success btn-sm" onClick={() => approveMutation.mutate(r.id)}>
-                          <Check size={12} /> Approve
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => refuseMutation.mutate(r.id)}>
-                          <X size={12} /> Refuse
-                        </button>
-                      </div>
-                    )}
-                  </td>
+                  {isHR && (
+                    <td>
+                      {(r.status === 'draft' || r.status === 'pending') && (
+                        <div className="d-flex gap-2">
+                          <button className="btn btn-success btn-sm" onClick={() => approveMutation.mutate(r.id)}>
+                            <Check size={12} /> Approve
+                          </button>
+                          <button className="btn btn-danger btn-sm" onClick={() => refuseMutation.mutate(r.id)}>
+                            <X size={12} /> Refuse
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No requests found.</td></tr>
+                <tr><td colSpan={isHR ? 7 : 5} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No requests found.</td></tr>
               )}
             </tbody>
           </table>

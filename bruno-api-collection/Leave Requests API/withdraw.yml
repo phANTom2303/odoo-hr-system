@@ -1,0 +1,23 @@
+info:
+  name: withdraw leave request
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: http://localhost:5001/api/leave-requests/1/withdraw
+  auth: inherit
+
+headers:
+  - name: Content-Type
+    value: application/json
+
+body:
+  mode: json
+  json: '{}'
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

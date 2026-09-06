@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import { getScheduleById, createSchedule, updateSchedule } from '../../api/schedules';
+import { useApp } from '../../context/AppContext';
 
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
@@ -17,7 +18,9 @@ export default function ScheduleForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
   const isNew = id === 'new';
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const [editing, setEditing] = useState(isNew);
   const [form, setForm] = useState({ name: '', is_active: true, lines: [] });
@@ -117,8 +120,8 @@ export default function ScheduleForm() {
       <div className="page-header">
         <h1>{isNew ? 'New Working Schedule' : form.name}</h1>
         <div className="d-flex gap-2">
-          {!isNew && !editing && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
-          {(editing || isNew) && (
+          {!isNew && !editing && isHR && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
+          {(editing || isNew) && isHR && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/schedules') : setEditing(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={save} disabled={isPending}>{isPending ? 'Saving…' : 'Save'}</button>
@@ -162,7 +165,7 @@ export default function ScheduleForm() {
       <div className="card">
         <div className="card-header">
           <h3>Weekly Schedule</h3>
-          {editing && (
+          {isHR && editing && (
             <button className="btn btn-secondary btn-sm" onClick={addLine}>
               <Plus size={13} /> Add Day
             </button>

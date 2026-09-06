@@ -1,0 +1,30 @@
+info:
+  name: create leave request
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: http://localhost:5001/api/leave-requests
+  auth: inherit
+
+headers:
+  - name: Content-Type
+    value: application/json
+
+body:
+  mode: json
+  json: |
+    {
+      "employee_id": 1,
+      "time_off_type_id": 1,
+      "start_date": "2026-09-10",
+      "end_date": "2026-09-12",
+      "reason": "Personal work"
+    }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -29,6 +29,8 @@ import Allocations        from './pages/timeoff/Allocations';
 import AllocationForm     from './pages/timeoff/AllocationForm';
 import TimeOffTypes       from './pages/timeoff/TimeOffTypes';
 import TimeOffTypeForm    from './pages/timeoff/TimeOffTypeForm';
+import Holidays           from './pages/timeoff/Holidays';
+import HolidayForm        from './pages/timeoff/HolidayForm';
 
 // Payroll
 import PayrunList           from './pages/payroll/PayrunList';
@@ -71,17 +73,17 @@ function AppShell() {
       <Topbar />
       <div className="main-content">
         <Routes>
-          <Route path="/"                           element={<Navigate to="/employees" replace />} />
+          <Route path="/"                           element={<Navigate to={currentUser.role === 'employee' ? '/contracts' : '/employees'} replace />} />
 
           {/* Employees */}
           <Route path="/employees"                  element={<ProtectedRoute allowedRoles={HR_ALL}><EmployeeList /></ProtectedRoute>} />
           <Route path="/employees/:id"              element={<ProtectedRoute allowedRoles={HR_ALL} ownerIdParam="id"><EmployeeForm /></ProtectedRoute>} />
 
           {/* Contracts & Schedules */}
-          <Route path="/contracts"                  element={<ProtectedRoute allowedRoles={HR_ALL}><ContractList /></ProtectedRoute>} />
-          <Route path="/contracts/:id"              element={<ProtectedRoute allowedRoles={HR_ALL} ownerIdParam="id"><ContractForm /></ProtectedRoute>} />
-          <Route path="/schedules"                  element={<ProtectedRoute allowedRoles={ALL}><ScheduleList /></ProtectedRoute>} />
-          <Route path="/schedules/:id"              element={<ProtectedRoute allowedRoles={ALL}><ScheduleForm /></ProtectedRoute>} />
+          <Route path="/contracts"                  element={<ProtectedRoute allowedRoles={ALL}><ContractList /></ProtectedRoute>} />
+          <Route path="/contracts/:id"              element={<ProtectedRoute allowedRoles={ALL}><ContractForm /></ProtectedRoute>} />
+          <Route path="/schedules"                  element={<ProtectedRoute allowedRoles={HR_ALL}><ScheduleList /></ProtectedRoute>} />
+          <Route path="/schedules/:id"              element={<ProtectedRoute allowedRoles={HR_ALL}><ScheduleForm /></ProtectedRoute>} />
 
           {/* Attendance */}
           <Route path="/attendance"                 element={<ProtectedRoute allowedRoles={ALL}><AttendanceList /></ProtectedRoute>} />
@@ -94,6 +96,8 @@ function AppShell() {
           <Route path="/timeoff/allocations/:id"    element={<ProtectedRoute allowedRoles={ALL}><AllocationForm /></ProtectedRoute>} />
           <Route path="/timeoff/types"              element={<ProtectedRoute allowedRoles={ALL}><TimeOffTypes /></ProtectedRoute>} />
           <Route path="/timeoff/types/:id"          element={<ProtectedRoute allowedRoles={ALL}><TimeOffTypeForm /></ProtectedRoute>} />
+          <Route path="/timeoff/holidays"           element={<ProtectedRoute allowedRoles={ALL}><Holidays /></ProtectedRoute>} />
+          <Route path="/timeoff/holidays/:id"       element={<ProtectedRoute allowedRoles={ALL}><HolidayForm /></ProtectedRoute>} />
 
           {/* Payroll */}
           <Route path="/payroll/runs"               element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayrunList /></ProtectedRoute>} />
@@ -113,7 +117,7 @@ function AppShell() {
           <Route path="/audit-trail"                element={<ProtectedRoute allowedRoles={ADMIN}><AuditTrail /></ProtectedRoute>} />
 
           {/* Fallback */}
-          <Route path="*"                           element={<Navigate to="/employees" replace />} />
+          <Route path="*" element={<Navigate to={currentUser?.role === 'employee' ? '/contracts' : '/employees'} replace />} />
         </Routes>
       </div>
     </div>

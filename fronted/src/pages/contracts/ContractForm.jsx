@@ -6,13 +6,15 @@ import { getContractById, createContract, updateContract } from '../../api/contr
 import { getEmployees } from '../../api/employees';
 import { getSchedules } from '../../api/schedules';
 import { getSalaryStructures } from '../../api/salary';
+import { useApp } from '../../context/AppContext';
 
 export default function ContractForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
+  const { currentUser } = useApp();
   const isNew = id === 'new';
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const { data: employeesRes } = useQuery({ queryKey: ['employees'], queryFn: () => getEmployees().then(r => r.data) });
   const { data: schedulesRes } = useQuery({ queryKey: ['schedules'],  queryFn: () => getSchedules().then(r => r.data) });
@@ -22,7 +24,8 @@ export default function ContractForm() {
   const schedules        = schedulesRes  ?? [];
   const salaryStructures = structuresRes ?? [];
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isFetching, isError } = useQuery({
+    queryKey: ['contract', id],
     queryFn: () => getContractById(id),
     enabled: !isNew,
   });
@@ -100,8 +103,8 @@ export default function ContractForm() {
     mutation.mutate(dataToSave);
   };
 
-  if (!isNew && isLoading) return <div><p>Loading...</p></div>;
-  if (!isNew && !existing && !isLoading) return <div><p>Contract not found.</p></div>;
+  if (!isNew && (isLoading || isFetching)) return <div><p>Loading...</p></div>;
+  if (!isNew && !existing && !isLoading && !isFetching) return <div><p>Contract not found.</p></div>;
 
   const statusBadge = (s) => {
     if (s === 'Running') return 'badge-green';
@@ -124,8 +127,8 @@ export default function ContractForm() {
           {!isNew && <span className={`badge ${statusBadge(form.status)}`} style={{ marginTop: 4 }}>{form.status}</span>}
         </div>
         <div className="d-flex gap-2">
-          {!isNew && !editing && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
-          {(editing || isNew) && (
+          {!isNew && !editing && isHR && <button className="btn btn-secondary" onClick={() => setEditing(true)}>Edit</button>}
+          {(editing || isNew) && isHR && (
             <>
               <button className="btn btn-secondary" onClick={() => isNew ? navigate('/contracts') : setEditing(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={save} disabled={mutation.isPending}>

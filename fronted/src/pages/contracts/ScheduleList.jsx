@@ -3,33 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { getSchedules } from '../../api/schedules';
-import { useAuth, useApp } from '../../context/AppContext';
+import { useApp } from '../../context/AppContext';
 
 export default function ScheduleList() {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
   const [search, setSearch] = useState('');
-  const { currentUser } = useAuth();
-  const { employees } = useApp();
+
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['schedules'],
     queryFn: () => getSchedules().then(r => r.data),
   });
 
-  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee';
-
-  // TODO: The backend should ideally filter schedules for the Employee role.
-  // We do frontend filtering here to prevent access to data of other employees.
-  let allowedSchedules = data ?? [];
-  if (isEmployeeOnly && currentUser?.employeeId) {
-    const empRecord = employees.find(e => e.id === currentUser.employeeId);
-    if (empRecord?.schedule) {
-      allowedSchedules = allowedSchedules.filter(s => s.name === empRecord.schedule);
-    }
-  }
-
-  const schedules = allowedSchedules.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase())
+  const schedules = (data ?? []).filter(s =>
+    s.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (isLoading) return <div className="page-header"><p>Loading schedules…</p></div>;
@@ -39,10 +28,10 @@ export default function ScheduleList() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-breadcrumb">Employees ▸ <span>Working Schedules</span></div>
+          <div className="page-breadcrumb">{isHR ? 'Employees ▸' : 'My Work ▸'} <span>Working Schedules</span></div>
           <h1>Working Schedules</h1>
         </div>
-        {!isEmployeeOnly && (
+        {isHR && (
           <button className="btn btn-primary" onClick={() => navigate('/schedules/new')}>
             <Plus size={15} /> New Schedule
           </button>
@@ -63,19 +52,22 @@ export default function ScheduleList() {
               <tr>
                 <th>Schedule Name</th>
                 <th>Days / Week</th>
-                <th>Hours / Week</th>
+                <th>Total Hours</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {schedules.map(s => (
-                <tr key={s.id} onClick={() => navigate(`/schedules/${s.id}`)}>
+                <tr key={s.id} onClick={() => navigate(`/schedules/${s.id}`)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 500 }}>{s.name}</td>
                   <td>{s.lines?.length ?? 0}</td>
-                  <td>{s.total_weekly_hours}h</td>
+                  <td>{s.total_weekly_hours ? `${s.total_weekly_hours}h` : '—'}</td>
                   <td><span className={`badge ${s.is_active ? 'badge-green' : 'badge-gray'}`}>{s.is_active ? 'Active' : 'Inactive'}</span></td>
                 </tr>
               ))}
+              {schedules.length === 0 && (
+                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No schedules found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

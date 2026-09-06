@@ -3,19 +3,24 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAllocations, approveAllocation, refuseAllocation } from '../../api/allocations';
+import { useApp } from '../../context/AppContext';
 
 export default function Allocations() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useApp();
   const [searchParams] = useSearchParams();
   const empFilter = searchParams.get('employee');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
+  const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
+
+  // Employees only see their own allocations
   const { data, isLoading, isError } = useQuery({
     queryKey: ['allocations', { empFilter, statusFilter }],
     queryFn: () => getAllocations({
-      employee_id: empFilter || undefined,
+      employee_id: isHR ? (empFilter || undefined) : currentUser?.id,
       status: statusFilter || undefined,
     }).then(r => r.data),
   });
@@ -55,9 +60,11 @@ export default function Allocations() {
           <div className="page-breadcrumb">Time Off ▸ <span>Allocations</span></div>
           <h1>Allocations</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/timeoff/allocations/new')}>
-          <Plus size={15} /> New
-        </button>
+        {isHR && (
+          <button className="btn btn-primary" onClick={() => navigate('/timeoff/allocations/new')}>
+            <Plus size={15} /> New
+          </button>
+        )}
       </div>
 
       <div className="toolbar">
@@ -79,7 +86,7 @@ export default function Allocations() {
           <table>
             <thead>
               <tr>
-                <th>Employee</th>
+                {isHR && <th>Employee</th>}
                 <th>Type</th>
                 <th>Allocated</th>
                 <th>Taken</th>
@@ -87,35 +94,38 @@ export default function Allocations() {
                 <th>Valid From</th>
                 <th>Valid To</th>
                 <th>Status</th>
-                <th>Actions</th>
+                {isHR && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map(a => (
                 <tr key={a.id}>
-                  <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.employee_name}</td>
+                  {isHR && <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.employee_name}</td>}
                   <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.time_off_type_name}</td>
                   <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.allocated_amount} {a.time_off_unit}</td>
                   <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.taken} {a.time_off_unit}</td>
-                  <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}
+                  <td
+                    onClick={() => navigate(`/timeoff/allocations/${a.id}`)}
                     style={{ fontWeight: 600, color: Number(a.remaining) > 3 ? 'var(--success)' : 'var(--warning)' }}>
                     {a.remaining} {a.time_off_unit}
                   </td>
                   <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.start_date?.slice(0, 10)}</td>
                   <td onClick={() => navigate(`/timeoff/allocations/${a.id}`)}>{a.end_date?.slice(0, 10)}</td>
                   <td><span className={`badge ${statusBadge(a.status)}`}>{a.status}</span></td>
-                  <td>
-                    {a.status === 'draft' && (
-                      <div className="d-flex gap-2">
-                        <button className="btn btn-success btn-sm" onClick={() => approveMutation.mutate(a.id)}>Approve</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => refuseMutation.mutate(a.id)}>Refuse</button>
-                      </div>
-                    )}
-                  </td>
+                  {isHR && (
+                    <td>
+                      {a.status === 'draft' && (
+                        <div className="d-flex gap-2">
+                          <button className="btn btn-success btn-sm" onClick={() => approveMutation.mutate(a.id)}>Approve</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => refuseMutation.mutate(a.id)}>Refuse</button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No allocations found.</td></tr>
+                <tr><td colSpan={isHR ? 9 : 7} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No allocations found.</td></tr>
               )}
             </tbody>
           </table>

@@ -1,0 +1,26 @@
+info:
+  name: approve allocation
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: http://localhost:5001/api/allocations/1/approve
+  auth: inherit
+
+headers:
+  - name: Content-Type
+    value: application/json
+
+body:
+  mode: json
+  json: |
+    {
+      "approved_by": 1
+    }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -9,16 +9,13 @@ export default function ProtectedRoute({ allowedRoles = [], ownerIdParam, childr
     return <Navigate to="/login" replace />;
   }
 
-  const hasRole = allowedRoles.includes(currentUser.role);
-  const isOwner = ownerIdParam && params[ownerIdParam] && parseInt(params[ownerIdParam]) === currentUser.id;
+  const hasRole  = allowedRoles.includes(currentUser.role);
+  const isOwner  = ownerIdParam && params[ownerIdParam] && parseInt(params[ownerIdParam]) === currentUser.id;
 
   if (!hasRole && !isOwner) {
-    return (
-      <div style={{ padding: 48, textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--danger, #ef4444)', fontSize: '2rem', marginBottom: '1rem' }}>403 Forbidden</h2>
-        <p style={{ color: 'var(--gray-500, #6b7280)' }}>You do not have permission to view this page.</p>
-      </div>
-    );
+    // Redirect to their home instead of showing a 403 wall
+    const home = currentUser.role === 'employee' ? '/contracts' : '/employees';
+    return <Navigate to={home} replace />;
   }
 
   return children;
