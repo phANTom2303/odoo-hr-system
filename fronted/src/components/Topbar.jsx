@@ -264,6 +264,10 @@ export default function Topbar() {
         {currentUser?.role === 'admin' && (
           <NavItem label="Users" to="/users" active={path === '/users'} />
         )}
+
+        {currentUser?.role === 'admin' && (
+          <NavItem label="Audit Trail" to="/audit-trail" active={path === '/audit-trail'} />
+        )}
       </nav>
 
       <div className="topbar-right">
