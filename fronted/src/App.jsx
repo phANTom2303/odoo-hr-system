@@ -95,8 +95,8 @@ function AppShell() {
           {/* Payroll */}
           <Route path="/payroll/runs"               element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayrunList /></ProtectedRoute>} />
           <Route path="/payroll/runs/:id"           element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayrunForm /></ProtectedRoute>} />
-          <Route path="/payroll/payslips"           element={<ProtectedRoute allowedRoles={ALL}><PayslipList /></ProtectedRoute>} />
-          <Route path="/payroll/payslips/:id"       element={<ProtectedRoute allowedRoles={ALL}><PayslipForm /></ProtectedRoute>} />
+          <Route path="/payroll/payslips"           element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayslipList /></ProtectedRoute>} />
+          <Route path="/payroll/payslips/:id"       element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayslipForm /></ProtectedRoute>} />
           <Route path="/salary/structures"          element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><SalaryStructures /></ProtectedRoute>} />
           <Route path="/salary/structures/:id"      element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><SalaryStructureForm /></ProtectedRoute>} />
           <Route path="/salary/rules"               element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><SalaryRules /></ProtectedRoute>} />

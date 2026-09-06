@@ -246,7 +246,7 @@ export default function Topbar() {
           ]}
         />
 
-        {['hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) ? (
+        {['hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) && (
           <NavItem label="Payroll ▾" active={path.startsWith('/payroll') || path.startsWith('/salary')}
             children={[
               { label: 'Pay Runs',          to: '/payroll/runs' },
@@ -255,8 +255,6 @@ export default function Topbar() {
               { label: 'Salary Rules',      to: '/salary/rules' },
             ]}
           />
-        ) : (
-          <NavItem label="My Payslips" to="/payroll/payslips" active={path.startsWith('/payroll/payslips')} />
         )}
 
         {['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role) && (

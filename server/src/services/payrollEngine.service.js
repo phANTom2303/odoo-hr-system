@@ -93,14 +93,18 @@ const sumEarnings = (lines) =>
  * Phase 0 — load everything shared by every employee in the run, exactly once.
  * Algorithm doc §2.
  *
- * The compute pre-condition *guards* (draft status, structure active) live in
+ * The compute pre-condition *guards* (draft status) live in
  * `payRun.service.js#compute`; this function only performs their data loads
  * plus the per-run constants the employee loop needs.
  *
+ * The old pay-run-level structure/rules load has been removed: salary rules
+ * are now resolved per-segment from each contract's own `salary_structure_id`
+ * via a per-structure cache (see Phase 5A in `computeEmployeePayslip`).
+ *
  * @param {number|string} payRunId
- * @returns {Promise<{payRun: object, structure: object, rules: object[],
+ * @returns {Promise<{payRun: object,
  *   paidHolidays: {date: string, dow: number}[], employeeIds: number[]}>}
- * @throws {NotFoundError} When the pay run or its salary structure is absent.
+ * @throws {NotFoundError} When the pay run is absent.
  */
 export const loadPayRunContext = async (payRunId) => {
     const payRun = await payrollDataRepo.findPayRunForCompute(payRunId);
@@ -108,21 +112,13 @@ export const loadPayRunContext = async (payRunId) => {
         throw new NotFoundError('Pay run not found');
     }
 
-    const structure = await payrollDataRepo.findStructureForPayRun(payRunId);
-    if (!structure) {
-        throw new NotFoundError('Salary structure for this pay run not found');
-    }
-
-    const [rules, paidHolidays, selectedEmployees] = await Promise.all([
-        payrollDataRepo.findRulesByStructure(payRun.salary_structure_id),
+    const [paidHolidays, selectedEmployees] = await Promise.all([
         payrollDataRepo.findPaidHolidays(payRun.start_date, payRun.end_date),
         payrollDataRepo.findSelectedEmployees(payRunId),
     ]);
 
     return {
         payRun,
-        structure,
-        rules,
         paidHolidays,
         employeeIds: selectedEmployees.map((row) => row.employee_id),
     };
@@ -144,7 +140,7 @@ export const loadPayRunContext = async (payRunId) => {
  *   lines: object[]}>}
  */
 export const computeEmployeePayslip = async (ctx, employeeId) => {
-    const { payRun, rules, paidHolidays } = ctx;
+    const { payRun, paidHolidays } = ctx;
     const periodStart = payRun.start_date;
     const periodEnd = payRun.end_date;
 
@@ -326,6 +322,42 @@ export const computeEmployeePayslip = async (ctx, employeeId) => {
         return resolved;
     };
 
+    // Rule lookups are cached per salary_structure_id — different contracts
+    // may (and often do) share the same structure. Mirrors the scheduleCache.
+    /** @type {Map<number, object[]>} */
+    const ruleCache = new Map();
+
+    /**
+     * @param {number} structureId
+     * @returns {Promise<object[]>} Salary rules ordered by sequence ASC.
+     */
+    const loadRules = async (structureId) => {
+        const cached = ruleCache.get(structureId);
+        if (cached) return cached;
+
+        const rules = await payrollDataRepo.findRulesByStructure(structureId);
+        ruleCache.set(structureId, rules);
+        return rules;
+    };
+
+    // Structure active-status lookups are also cached — we only need to warn
+    // once per structure, and multiple segments may share the same structure.
+    /** @type {Map<number, {id: number, name: string, status: string}>} */
+    const structureCache = new Map();
+
+    /**
+     * @param {number} structureId
+     * @returns {Promise<{id: number, name: string, status: string}|null>}
+     */
+    const loadStructure = async (structureId) => {
+        const cached = structureCache.get(structureId);
+        if (cached !== undefined) return cached;
+
+        const structure = await payrollDataRepo.findStructureById(structureId);
+        structureCache.set(structureId, structure);
+        return structure;
+    };
+
     const segments = [];
     for (const contract of contracts) {
         const segStart = maxDate(contract.start_date, periodStart);
@@ -365,7 +397,32 @@ export const computeEmployeePayslip = async (ctx, employeeId) => {
     const refTotalPeriodWorkdays = refSegment.totalPeriodWorkdays;
 
     // ── Phase 5A: salary rule execution, per segment (§7) ────────────
+    // Rules are now resolved from each segment's own contract.salary_structure_id
+    // instead of from a single pay-run-level structure.
     for (const segment of segments) {
+        const structureId = segment.contract.salary_structure_id;
+
+        // Per-segment structure-active check — replaces the old pay-run-level guard.
+        const structure = await loadStructure(structureId);
+        if (!structure || structure.status === 'inactive') {
+            warnings.push(
+                makeWarning(
+                    WARNING.STRUCTURE_INACTIVE,
+                    SEVERITY.WARNING,
+                    `Salary structure "${structure?.name ?? `#${structureId}`}" is inactive for ${label}'s contract #${segment.contract.id}`,
+                    {
+                        employee_id: employeeId,
+                        contract_id: segment.contract.id,
+                        structure_id: structureId,
+                        structure_name: structure?.name ?? null,
+                    },
+                ),
+            );
+        }
+
+        // Load rules for this contract's structure (cached across segments).
+        const segmentRules = await loadRules(structureId);
+
         // `computed_values` is keyed by rule.id and is PER SEGMENT — a fresh
         // map each time round. A percentage rule reads its base from here, and
         // that base is already prorated, so the proration factor must NOT be
@@ -373,7 +430,7 @@ export const computeEmployeePayslip = async (ctx, employeeId) => {
         /** @type {Map<number, number>} */
         const computedValues = new Map();
 
-        for (const rule of rules) {
+        for (const rule of segmentRules) {
             let amount = 0;
 
             if (rule.rule_type === 'fixed') {

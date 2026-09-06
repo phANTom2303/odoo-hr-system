@@ -41,3 +41,28 @@ export const review = asyncHandler(async (req, res) => {
         data: reviewed,
     });
 });
+
+/** POST /api/payslips/:id/manual-lines */
+export const addManualLine = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { rule_name, amount, category } = req.body;
+
+    const updated = await payslipService.addManualLine(id, { rule_name, amount, category });
+
+    res.status(RESPONSE_CODES.SUCCESS_CODE).json({
+        success: true,
+        data: updated,
+    });
+});
+
+/** POST /api/payslips/:id/cancel */
+export const cancel = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const result = await payslipService.cancel(id);
+
+    res.status(RESPONSE_CODES.SUCCESS_CODE).json({
+        success: true,
+        data: result,
+    });
+});

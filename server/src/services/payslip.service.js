@@ -10,8 +10,10 @@
  */
 
 import * as payslipRepo from '#repositories/payslip.repo.js';
-import { ConflictError, NotFoundError } from '#lib/errors.js';
-import { CATEGORY, PAYSLIP_STATUS } from '#lib/payroll.constants.js';
+import * as payRunRepo from '#repositories/payRun.repo.js';
+import * as payRunService from '#services/payRun.service.js';
+import { ConflictError, NotFoundError, BadRequestError } from '#lib/errors.js';
+import { CATEGORY, PAYRUN_STATUS, PAYSLIP_STATUS } from '#lib/payroll.constants.js';
 import { num, round2 } from '#utils/payrollDates.js';
 
 /** Payslip statuses that are terminal — a review can no longer change anything. */
@@ -109,4 +111,65 @@ export const review = async (id, userId) => {
     }
 
     return payslipRepo.markReviewed(id, userId);
+};
+
+/**
+ * Add a manual line to a payslip and recalculate its totals.
+ */
+export const addManualLine = async (id, data) => {
+    const payslip = await payslipRepo.findById(id);
+    if (!payslip) {
+        throw new NotFoundError('Payslip not found');
+    }
+    if (UNREVIEWABLE_STATUSES.has(payslip.status)) {
+        throw new ConflictError(`Payslips with status '${payslip.status}' cannot be edited`);
+    }
+
+    const { rule_name, amount, category } = data;
+    if (!rule_name || !amount || !category) {
+        throw new BadRequestError('rule_name, amount, category are required');
+    }
+
+    let signedAmount = num(amount);
+    if (category === CATEGORY.DEDUCTION && signedAmount > 0) {
+        signedAmount = -signedAmount;
+    }
+
+    await payslipRepo.insertManualLine(id, { rule_name, amount: signedAmount, category });
+
+    const lines = await payslipRepo.findLines(id);
+    const totals = rollUpByCategory(lines);
+
+    const newGross = totals[CATEGORY.BASIC] + totals[CATEGORY.ALLOWANCE];
+    const newDeductions = Math.abs(totals[CATEGORY.DEDUCTION]);
+    const newNet = newGross - newDeductions;
+
+    const updated = await payslipRepo.updatePayslipTotals(id, { 
+        gross_salary: newGross, 
+        total_deductions: newDeductions, 
+        net_salary: newNet 
+    });
+
+    return { ...updated, lines, totals: rollUpByCategory(lines) };
+};
+
+/**
+ * Cancel a payslip: removes employee from pay run, deletes payslips, reverts pay run to draft, and re-computes.
+ */
+export const cancel = async (id) => {
+    const payslip = await payslipRepo.findById(id);
+    if (!payslip) {
+        throw new NotFoundError('Payslip not found');
+    }
+    if (UNREVIEWABLE_STATUSES.has(payslip.status)) {
+        throw new ConflictError(`Payslips with status '${payslip.status}' cannot be cancelled`);
+    }
+
+    const payRunId = payslip.pay_run_id;
+
+    await payRunRepo.removeEmployee(payRunId, payslip.employee_id);
+    await payslipRepo.deleteByPayRun(payRunId);
+    await payRunRepo.updateMeta(payRunId, { status: PAYRUN_STATUS.DRAFT });
+
+    return payRunService.compute(payRunId);
 };
