@@ -5,6 +5,131 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPayslipById, reviewPayslip, n, addManualLine, cancelPayslip } from '../../api/payroll';
 import { useAuth } from '../../context/AppContext';
 
+function PayslipPrintModal({ slip, onClose }) {
+  // Same per-segment grouping as the admin computation panel below — the
+  // print document stays exactly as detailed, it just drops the admin-only
+  // chrome (warnings, review status, contract IDs) that means nothing to
+  // the employee holding the payslip.
+  const lines = slip.lines ?? [];
+  const groupedSegments = groupByContractTopLevel(lines);
+  const contractSegments = groupedSegments.filter((g) => !g.isSynthetic);
+  const syntheticSegment = groupedSegments.find((g) => g.isSynthetic);
+
+  const gross = n(slip.gross_salary);
+  const totalDeductions = n(slip.total_deductions);
+  const net = n(slip.net_salary);
+  const generatedAt = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header no-print">
+          <h3>Payslip Preview</h3>
+          <button className="btn-ghost btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="payslip-print">
+            <div className="payslip-print-header">
+              <div>
+                <div className="brand">PeoplePay360</div>
+                <div className="doc-title">Payslip</div>
+              </div>
+              <div className="meta">
+                Payslip #{slip.id}<br />
+                Pay Period: {slip.start_date} – {slip.end_date}<br />
+                Generated: {generatedAt}
+              </div>
+            </div>
+
+            <div className="payslip-print-grid">
+              <div className="field"><span>Employee</span><strong>{slip.employee_name}</strong></div>
+              <div className="field"><span>Employee ID</span><strong>{slip.employee_id}</strong></div>
+              <div className="field"><span>Department</span><strong>{slip.department_name || '—'}</strong></div>
+              <div className="field"><span>Designation</span><strong>{slip.job_position_title || '—'}</strong></div>
+              <div className="field"><span>Salary Structure</span><strong>{slip.structure_name || '—'}</strong></div>
+              <div className="field"><span>Worked Days</span><strong>{n(slip.worked_days)}</strong></div>
+            </div>
+
+            {contractSegments.map((seg) => (
+              <div key={seg.key} style={{ marginBottom: 16 }}>
+                <h4>Segment: {seg.segment_start} to {seg.segment_end}</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ color: 'var(--gray-500)', fontSize: 10, textTransform: 'uppercase', textAlign: 'left', paddingBottom: 4 }}>Rule</th>
+                      <th style={{ color: 'var(--gray-500)', fontSize: 10, textTransform: 'uppercase', textAlign: 'left', paddingBottom: 4 }}>Category</th>
+                      <th className="amt" style={{ color: 'var(--gray-500)', fontSize: 10, textTransform: 'uppercase', paddingBottom: 4 }}>Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {seg.lines.map((line) => {
+                      const amount = n(line.amount);
+                      return (
+                        <tr key={line.id}>
+                          <td>{line.rule_name}</td>
+                          <td style={{ color: 'var(--gray-500)' }}>{line.category}</td>
+                          <td className="amt">
+                            {amount < 0 ? `(${Math.abs(amount).toLocaleString('en-IN')})` : amount.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+
+            <div>
+              <h4>Totals{syntheticSegment ? ' & Adjustments' : ''}</h4>
+              <table>
+                <tbody>
+                  {syntheticSegment && syntheticSegment.lines.map((line) => {
+                    const amount = n(line.amount);
+                    return (
+                      <tr key={line.id}>
+                        <td>{line.rule_name}</td>
+                        <td style={{ color: 'var(--gray-500)' }}>{line.category}</td>
+                        <td className="amt">
+                          {amount < 0 ? `(${Math.abs(amount).toLocaleString('en-IN')})` : amount.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr>
+                    <td>Gross Salary</td>
+                    <td style={{ color: 'var(--gray-500)' }}>gross</td>
+                    <td className="amt">{gross.toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr>
+                    <td>Total Deductions</td>
+                    <td style={{ color: 'var(--gray-500)' }}>deduction</td>
+                    <td className="amt">({totalDeductions.toLocaleString('en-IN')})</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="payslip-net-box">
+              <span className="label">Net Pay</span>
+              <span className="value">₹ {net.toLocaleString('en-IN')}</span>
+            </div>
+
+            <div className="payslip-print-footer">
+              This is a system-generated payslip and does not require a signature.
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer no-print">
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+          <button className="btn btn-primary" onClick={() => window.print()}>
+            <Printer size={14} /> Print / Save as PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 const statusBadge = (s) => {
   if (s === 'paid') return 'badge-green';
@@ -54,6 +179,7 @@ export default function PayslipForm() {
   const [manualName, setManualName] = useState('');
   const [manualAmount, setManualAmount] = useState('');
   const [manualCategory, setManualCategory] = useState('allowance');
+  const [showPrint, setShowPrint] = useState(false);
   const canProcess = ['admin', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const { data: slip, isLoading, isError, error } = useQuery({
@@ -92,8 +218,8 @@ export default function PayslipForm() {
   if (isError) return <div style={{ padding: 20, color: 'var(--danger)' }}>Failed to load payslip: {error.message}</div>;
   if (!slip) return <div style={{ padding: 20 }}><p>Payslip not found.</p></div>;
 
-  const handlePrint = () => window.print();
-  
+  const handlePrint = () => setShowPrint(true);
+
   const handleCancel = () => {
     if (window.confirm("Cancelling this payslip will remove the employee from the pay run and trigger a full recomputation of all other payslips. Proceed?")) {
       cancelMutation.mutate();
@@ -156,7 +282,7 @@ export default function PayslipForm() {
             </button>
           )}
           <button className="btn btn-secondary" onClick={handlePrint}>
-            <Printer size={14} /> Print Payslip
+            <Printer size={14} /> Print / Export PDF
           </button>
         </div>
       </div>
@@ -340,6 +466,8 @@ export default function PayslipForm() {
           </div>
         </div>
       )}
+
+      {showPrint && <PayslipPrintModal slip={slip} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }
