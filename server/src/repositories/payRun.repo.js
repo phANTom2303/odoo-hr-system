@@ -79,7 +79,8 @@ export const findById = async (id) => {
             ${PAY_RUN_COLUMNS},
             u.first_name || ' ' || u.last_name AS created_by_name,
             (SELECT COUNT(*) FROM pay_run_employees pre WHERE pre.pay_run_id = pr.id)::int AS employee_count,
-            (SELECT COALESCE(SUM(ps.net_salary), 0) FROM payslips ps WHERE ps.pay_run_id = pr.id)::float8 AS total_net
+            (SELECT COALESCE(SUM(ps.net_salary), 0) FROM payslips ps WHERE ps.pay_run_id = pr.id)::float8 AS total_net,
+            (SELECT array_agg(employee_id) FROM pay_run_employees pre WHERE pre.pay_run_id = pr.id) AS employee_ids
         FROM pay_runs pr
         JOIN users u ON u.id = pr.created_by
         WHERE pr.id = $1;
@@ -222,25 +223,65 @@ export const updateStatus = async (id, status, { validated_at = null, paid_at = 
 };
 
 /**
- * Update the mutable metadata of a draft pay run (name only).
+ * Update the mutable metadata of a draft or computed pay run.
  * @param {number|string} id
  * @param {object} data
- * @param {string} data.name
+ * @param {string} [data.name]
+ * @param {string} [data.start_date]
+ * @param {string} [data.end_date]
+ * @param {string} [data.status]
+ * @param {number[]} [data.employee_ids]
  * @returns {Promise<object>} The updated row.
  */
-export const updateMeta = async (id, { name }) => {
-    const sql = `
-        UPDATE pay_runs
-        SET name       = $2,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-        RETURNING
-            id, name,
-            start_date::text AS start_date, end_date::text AS end_date,
-            status, created_by, validated_at, paid_at, created_at, updated_at;
-    `;
-    const { rows } = await query(sql, [id, name]);
-    return rows[0];
+export const updateMeta = async (id, data) => {
+    return transaction(async (client) => {
+        const updates = [];
+        const values = [id];
+        let idx = 2;
+
+        if (data.name !== undefined) {
+            updates.push(`name = $${idx++}`);
+            values.push(data.name);
+        }
+        if (data.start_date !== undefined) {
+            updates.push(`start_date = $${idx++}`);
+            values.push(data.start_date);
+        }
+        if (data.end_date !== undefined) {
+            updates.push(`end_date = $${idx++}`);
+            values.push(data.end_date);
+        }
+        if (data.status !== undefined) {
+            updates.push(`status = $${idx++}`);
+            values.push(data.status);
+        }
+
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+        const sql = `
+            UPDATE pay_runs
+            SET ${updates.join(', ')}
+            WHERE id = $1
+            RETURNING
+                id, name,
+                start_date::text AS start_date, end_date::text AS end_date,
+                status, created_by, validated_at, paid_at, created_at, updated_at;
+        `;
+        const { rows: [payRun] } = await client.query(sql, values);
+
+        if (data.employee_ids !== undefined) {
+            await client.query(`DELETE FROM pay_run_employees WHERE pay_run_id = $1`, [id]);
+            if (data.employee_ids.length > 0) {
+                const vals = [id, ...data.employee_ids];
+                const placeholders = data.employee_ids.map((_, i) => `($1, $${i + 2})`).join(', ');
+                await client.query(
+                    `INSERT INTO pay_run_employees (pay_run_id, employee_id) VALUES ${placeholders} ON CONFLICT DO NOTHING;`,
+                    vals
+                );
+            }
+        }
+        return payRun;
+    });
 };
 
 /**
@@ -252,6 +293,20 @@ export const remove = async (id) => {
     const sql = `DELETE FROM pay_runs WHERE id = $1 RETURNING id;`;
     const { rows } = await query(sql, [id]);
     return rows[0] ?? null;
+};
+
+/**
+ * Drop a single employee from a pay run's selection (used by
+ * `payslip.service.js#cancel` when a payslip is cancelled).
+ * @param {number|string} payRunId
+ * @param {number|string} employeeId
+ * @returns {Promise<void>}
+ */
+export const removeEmployee = async (payRunId, employeeId) => {
+    await query(
+        `DELETE FROM pay_run_employees WHERE pay_run_id = $1 AND employee_id = $2;`,
+        [payRunId, employeeId]
+    );
 };
 
 /**

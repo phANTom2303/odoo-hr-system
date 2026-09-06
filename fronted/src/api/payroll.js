@@ -44,3 +44,12 @@ export const getPayslips = (params = {}) => fetcher(`/payslips${qs(params) ? `?$
 export const getPayslipById = (id) => fetcher(`/payslips/${id}`);
 
 export const reviewPayslip = (id) => fetcher(`/payslips/${id}/review`, { method: 'POST' });
+
+export const addManualLine = (payslipId, data) =>
+  fetcher(`/payslips/${payslipId}/manual-lines`, { method: 'POST', body: JSON.stringify(data) });
+
+export const cancelPayslip = (payslipId) =>
+  fetcher(`/payslips/${payslipId}/cancel`, { method: 'POST' });
+
+export const updatePayRunMeta = (id, data) =>
+  fetcher(`/pay-runs/${id}`, { method: 'PUT', body: JSON.stringify(data) });

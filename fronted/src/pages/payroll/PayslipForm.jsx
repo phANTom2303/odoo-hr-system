@@ -1,18 +1,10 @@
-import { Fragment } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Printer, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPayslipById, reviewPayslip, n } from '../../api/payroll';
+import { getPayslipById, reviewPayslip, n, addManualLine, cancelPayslip } from '../../api/payroll';
+import { useAuth } from '../../context/AppContext';
 
-const CATEGORY_LABELS = {
-  basic: 'Basic',
-  allowance: 'Allowance',
-  deduction: 'Deduction',
-};
-
-// GROSS/NET lines are rendered once at the bottom from the payslip's own
-// authoritative totals — see PAYROLL_API_REFERENCE.md §11 "Known issues & gaps".
-const CATEGORY_ORDER = ['basic', 'allowance', 'deduction'];
 
 const statusBadge = (s) => {
   if (s === 'paid') return 'badge-green';
@@ -27,12 +19,14 @@ const severityAlertClass = (severity) => {
   return 'alert-warning';
 };
 
-/** Group already-sequence-ordered lines by contract segment, preserving first-seen order. */
-function groupByContract(lines) {
+function groupByContractTopLevel(lines) {
   const groups = [];
   const byKey = new Map();
   for (const line of lines) {
-    const key = line.contract_id ?? `none-${line.segment_start ?? ''}-${line.segment_end ?? ''}`;
+    if (line.category === 'gross' || line.category === 'net') continue;
+    
+    const isSynthetic = line.contract_id == null;
+    const key = isSynthetic ? 'synthetic' : `${line.contract_id}-${line.segment_start}-${line.segment_end}`;
     let group = byKey.get(key);
     if (!group) {
       group = {
@@ -40,6 +34,7 @@ function groupByContract(lines) {
         contract_id: line.contract_id,
         segment_start: line.segment_start,
         segment_end: line.segment_end,
+        isSynthetic,
         lines: [],
       };
       byKey.set(key, group);
@@ -54,6 +49,12 @@ export default function PayslipForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
+  
+  const [manualName, setManualName] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualCategory, setManualCategory] = useState('allowance');
+  const canProcess = ['admin', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const { data: slip, isLoading, isError, error } = useQuery({
     queryKey: ['payslip', id],
@@ -70,21 +71,45 @@ export default function PayslipForm() {
     },
   });
 
+  const manualLineMutation = useMutation({
+    mutationFn: (data) => addManualLine(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payslip', id] });
+      setManualName('');
+      setManualAmount('');
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelPayslip(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pay-runs'] });
+      navigate(`/payroll/runs/${slip.pay_run_id}`);
+    }
+  });
+
   if (isLoading) return <div style={{ padding: 20 }}>Loading payslip…</div>;
   if (isError) return <div style={{ padding: 20, color: 'var(--danger)' }}>Failed to load payslip: {error.message}</div>;
   if (!slip) return <div style={{ padding: 20 }}><p>Payslip not found.</p></div>;
 
   const handlePrint = () => window.print();
+  
+  const handleCancel = () => {
+    if (window.confirm("Cancelling this payslip will remove the employee from the pay run and trigger a full recomputation of all other payslips. Proceed?")) {
+      cancelMutation.mutate();
+    }
+  };
+  
+  const handleAddManualLine = (e) => {
+    e.preventDefault();
+    if (!manualName || !manualAmount) return;
+    manualLineMutation.mutate({ rule_name: manualName, amount: Number(manualAmount), category: manualCategory });
+  };
 
   const lines = slip.lines ?? [];
-  // GROSS/NET rows repeat per contract segment on a prorated payslip and both
-  // show the whole-payslip total, so they're rendered once at the bottom instead.
-  const breakdownLines = lines.filter(l => l.category !== 'gross' && l.category !== 'net');
-
-  const distinctSegments = new Set(
-    breakdownLines.map(l => `${l.contract_id ?? ''}|${l.segment_start ?? ''}|${l.segment_end ?? ''}`)
-  );
-  const isProrated = slip.contract_id === null && distinctSegments.size > 1;
+  const groupedSegments = groupByContractTopLevel(lines);
+  const contractSegments = groupedSegments.filter(g => !g.isSynthetic);
+  const syntheticSegment = groupedSegments.find(g => g.isSynthetic);
 
   const gross = n(slip.gross_salary);
   const totalDeductions = n(slip.total_deductions);
@@ -92,7 +117,8 @@ export default function PayslipForm() {
 
   const warnings = slip.warnings ?? [];
   const hasErrorWarning = warnings.some(w => w.severity === 'error');
-  const canReview = !slip.is_reviewed && slip.status !== 'paid';
+  const canReview = !slip.is_reviewed && slip.status !== 'paid' && slip.status !== 'cancelled';
+  const canCancel = canProcess && (slip.status === 'draft' || slip.status === 'computed');
 
   return (
     <div>
@@ -108,6 +134,7 @@ export default function PayslipForm() {
           <h1>Payslip — {slip.employee_name}</h1>
           <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center' }}>
             <span className={`badge ${statusBadge(slip.status)}`}>{slip.status}</span>
+            {slip.is_reviewed && <span className="badge badge-green">Reviewed</span>}
             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>
               {slip.start_date} – {slip.end_date}{slip.structure_name ? ` • ${slip.structure_name}` : ''}
             </span>
@@ -121,6 +148,11 @@ export default function PayslipForm() {
               disabled={reviewMutation.isPending}
             >
               <CheckCircle2 size={14} /> {reviewMutation.isPending ? 'Reviewing…' : 'Review'}
+            </button>
+          )}
+          {canCancel && (
+            <button className="btn btn-danger" onClick={handleCancel} disabled={cancelMutation.isPending}>
+              <XCircle size={14} /> Cancel Payslip
             </button>
           )}
           <button className="btn btn-secondary" onClick={handlePrint}>
@@ -180,103 +212,134 @@ export default function PayslipForm() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h3>Salary Computation</h3>
-        </div>
-        {breakdownLines.length > 0 ? (
-          <div className="table-wrap">
-            <table className="salary-table">
-              <thead>
-                <tr>
-                  <th>Rule Name</th>
-                  <th>Code</th>
-                  <th>Category</th>
-                  <th style={{ textAlign: 'right' }}>Amount (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {CATEGORY_ORDER.map(cat => {
-                  const catLines = breakdownLines.filter(l => l.category === cat);
-                  if (catLines.length === 0) return null;
+      {lines.length > 0 ? (
+        <div>
+          {contractSegments.map(seg => (
+            <div className="card" key={seg.key} style={{ marginBottom: 16 }}>
+              <div className="card-header">
+                <h3>Segment: {seg.segment_start} to {seg.segment_end}</h3>
+                <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>Contract #{seg.contract_id}</div>
+              </div>
+              <div className="table-wrap">
+                <table className="salary-table">
+                  <thead>
+                    <tr>
+                      <th>Rule Name</th>
+                      <th>Code</th>
+                      <th>Category</th>
+                      <th style={{ textAlign: 'right' }}>Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {seg.lines.map(line => {
+                      const amount = n(line.amount);
+                      return (
+                        <tr key={line.id}>
+                          <td style={{ paddingLeft: 28 }}>{line.rule_name}</td>
+                          <td className="font-mono" style={{ color: 'var(--gray-500)' }}>{line.rule_code}</td>
+                          <td style={{ color: 'var(--gray-500)' }}>{line.category}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 500, color: amount < 0 ? 'var(--danger)' : 'var(--gray-800)' }}>
+                            {amount < 0 ? `(${Math.abs(amount).toLocaleString('en-IN')})` : amount.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
 
-                  const segments = isProrated ? groupByContract(catLines) : [{ key: cat, lines: catLines }];
-
-                  return (
-                    <Fragment key={`cat-${cat}`}>
-                      <tr className="category-row">
-                        <td colSpan={4}>{CATEGORY_LABELS[cat] ?? cat}</td>
+          <div className="card">
+            <div className="card-header">
+              <h3>Consolidated Totals {syntheticSegment ? '& Adjustments' : ''}</h3>
+            </div>
+            <div className="table-wrap">
+              <table className="salary-table">
+                <thead>
+                  <tr>
+                    <th>Rule Name</th>
+                    <th>Code</th>
+                    <th>Category</th>
+                    <th style={{ textAlign: 'right' }}>Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syntheticSegment && syntheticSegment.lines.map(line => {
+                    const amount = n(line.amount);
+                    return (
+                      <tr key={line.id}>
+                        <td style={{ paddingLeft: 28 }}>{line.rule_name}</td>
+                        <td className="font-mono" style={{ color: 'var(--gray-500)' }}>{line.rule_code}</td>
+                        <td style={{ color: 'var(--gray-500)' }}>{line.category}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 500, color: amount < 0 ? 'var(--danger)' : 'var(--gray-800)' }}>
+                          {amount < 0 ? `(${Math.abs(amount).toLocaleString('en-IN')})` : amount.toLocaleString('en-IN')}
+                        </td>
                       </tr>
-                      {segments.map(seg => (
-                        <Fragment key={`seg-${cat}-${seg.key}`}>
-                          {isProrated && (
-                            <tr>
-                              <td colSpan={4} style={{ paddingLeft: 20, fontSize: 12, color: 'var(--gray-500)', fontStyle: 'italic' }}>
-                                {seg.contract_id != null
-                                  ? `Contract #${seg.contract_id} — ${seg.segment_start} → ${seg.segment_end}`
-                                  : 'Unassigned'}
-                              </td>
-                            </tr>
-                          )}
-                          {seg.lines.map(line => {
-                            const amount = n(line.amount);
-                            const factor = n(line.proration_factor);
-                            const isProratedLine = factor !== null && factor < 1;
-                            return (
-                              <tr key={line.id}>
-                                <td style={{ paddingLeft: isProrated ? 40 : 28 }}>
-                                  {line.rule_name}
-                                  {isProratedLine && (
-                                    <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--gray-400)' }}>
-                                      ({Math.round(factor * 100)}% of period)
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="font-mono" style={{ color: 'var(--gray-500)' }}>{line.rule_code}</td>
-                                <td style={{ color: 'var(--gray-500)' }}>{line.category}</td>
-                                <td style={{ textAlign: 'right', fontWeight: 500, color: amount < 0 ? 'var(--danger)' : 'var(--gray-800)' }}>
-                                  {amount < 0 ? `(${Math.abs(amount).toLocaleString('en-IN')})` : amount.toLocaleString('en-IN')}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </Fragment>
-                      ))}
-                    </Fragment>
-                  );
-                })}
-                <tr className="category-row">
-                  <td colSpan={4}>Gross / Net</td>
-                </tr>
-                <tr>
-                  <td style={{ paddingLeft: 28 }}>Gross Salary</td>
-                  <td className="font-mono" style={{ color: 'var(--gray-500)' }}>GROSS</td>
-                  <td style={{ color: 'var(--gray-500)' }}>gross</td>
-                  <td style={{ textAlign: 'right', fontWeight: 500 }}>{gross.toLocaleString('en-IN')}</td>
-                </tr>
-                <tr>
-                  <td style={{ paddingLeft: 28 }}>Total Deductions</td>
-                  <td className="font-mono" style={{ color: 'var(--gray-500)' }}>—</td>
-                  <td style={{ color: 'var(--gray-500)' }}>deduction</td>
-                  <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--danger)' }}>
-                    ({totalDeductions.toLocaleString('en-IN')})
-                  </td>
-                </tr>
-                <tr className="total-row">
-                  <td colSpan={3} style={{ paddingTop: 12 }}>NET SALARY</td>
-                  <td style={{ textAlign: 'right', fontSize: 16, color: 'var(--success)', paddingTop: 12 }}>
-                    ₹ {net.toLocaleString('en-IN')}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    );
+                  })}
+                  <tr>
+                    <td style={{ paddingLeft: 28 }}>Gross Salary</td>
+                    <td className="font-mono" style={{ color: 'var(--gray-500)' }}>GROSS</td>
+                    <td style={{ color: 'var(--gray-500)' }}>gross</td>
+                    <td style={{ textAlign: 'right', fontWeight: 500 }}>{gross.toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ paddingLeft: 28 }}>Total Deductions</td>
+                    <td className="font-mono" style={{ color: 'var(--gray-500)' }}>—</td>
+                    <td style={{ color: 'var(--gray-500)' }}>deduction</td>
+                    <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--danger)' }}>
+                      ({totalDeductions.toLocaleString('en-IN')})
+                    </td>
+                  </tr>
+                  <tr className="total-row">
+                    <td colSpan={3} style={{ paddingTop: 12 }}>NET SALARY</td>
+                    <td style={{ textAlign: 'right', fontSize: 16, color: 'var(--success)', paddingTop: 12 }}>
+                      ₹ {net.toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : (
+
+          {!slip.is_reviewed && canProcess && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-header">
+                <h3>Add Manual Line</h3>
+              </div>
+              <div className="card-body">
+                <form onSubmit={handleAddManualLine} style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+                  <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                    <label>Rule Name</label>
+                    <input type="text" className="form-control" value={manualName} onChange={e => setManualName(e.target.value)} required />
+                  </div>
+                  <div className="form-group" style={{ width: 150, marginBottom: 0 }}>
+                    <label>Category</label>
+                    <select className="form-control" value={manualCategory} onChange={e => setManualCategory(e.target.value)}>
+                      <option value="allowance">Allowance</option>
+                      <option value="deduction">Deduction</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ width: 150, marginBottom: 0 }}>
+                    <label>Amount (₹)</label>
+                    <input type="number" className="form-control" value={manualAmount} onChange={e => setManualAmount(e.target.value)} required />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={manualLineMutation.isPending}>
+                    <Plus size={14} /> Add Line
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card">
           <div className="empty-state">
             <p>No computation yet. Go to the Pay Run and click Compute.</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

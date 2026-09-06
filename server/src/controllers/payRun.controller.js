@@ -68,9 +68,9 @@ export const getById = asyncHandler(async (req, res) => {
  */
 export const updateMeta = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, start_date, end_date, employee_ids } = req.body;
 
-    const updated = await payRunService.updateMeta(id, { name });
+    const updated = await payRunService.updateMeta(id, { name, start_date, end_date, employee_ids });
 
     res.status(RESPONSE_CODES.SUCCESS_CODE).json({
         success: true,

@@ -28,6 +28,18 @@ export const deleteByPayRunAndEmployee = async (client, payRunId, employeeId) =>
 };
 
 /**
+ * Deletes all payslips and their cascaded lines for a specific pay run.
+ * @param {number|string} payRunId
+ * @returns {Promise<void>}
+ */
+export const deleteByPayRun = async (payRunId) => {
+    await query(
+        `DELETE FROM payslips WHERE pay_run_id = $1;`,
+        [payRunId]
+    );
+};
+
+/**
  * Phase 10 persistence: replace any prior payslip for this (pay_run, employee) pair
  * and insert the freshly computed one with its lines, all in a single transaction.
  * @param {object} payload
@@ -284,4 +296,31 @@ export const findUnreviewedErrorPayslips = async (payRunId) => {
     `;
     const { rows } = await query(sql, [payRunId]);
     return rows;
+};
+
+/**
+ * @param {number|string} payslipId
+ * @param {object} lineData
+ * @returns {Promise<void>}
+ */
+export const insertManualLine = async (payslipId, { rule_name, amount, category }) => {
+    const sequence = 8500;
+    const rule_code = 'MANUAL';
+    await query(
+        `INSERT INTO payslip_lines (
+            payslip_id, rule_code, rule_name, category, sequence, amount, computed_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, NOW());`,
+        [payslipId, rule_code, rule_name, category, sequence, amount]
+    );
+};
+
+export const updatePayslipTotals = async (payslipId, { gross_salary, total_deductions, net_salary }) => {
+    const sql = `
+        UPDATE payslips
+        SET gross_salary = $2, total_deductions = $3, net_salary = $4, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *;
+    `;
+    const { rows } = await query(sql, [payslipId, gross_salary, total_deductions, net_salary]);
+    return rows[0];
 };

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, CheckCircle, DollarSign, Mail, AlertTriangle, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Play, CheckCircle, DollarSign, Mail, AlertTriangle, Trash2, X, Edit2 } from 'lucide-react';
 import { useAuth } from '../../context/AppContext';
 import {
   getPayRunById,
@@ -10,6 +10,8 @@ import {
   markPayRunPaid,
   deletePayRun,
   reviewPayslip,
+  updatePayRunMeta,
+  getEligibleEmployees,
   n,
 } from '../../api/payroll';
 
@@ -29,6 +31,136 @@ const WARNING_BADGE = {
 
 const hasUnreviewedError = (p) => !p.is_reviewed && p.warnings.some((w) => w.severity === 'error');
 
+
+function PayrunEditModal({ run, onClose }) {
+  const queryClient = useQueryClient();
+  const [step, setStep] = useState(1);
+  const [name, setName] = useState(run.name);
+  const [startDate, setStartDate] = useState(run.start_date);
+  const [endDate, setEndDate] = useState(run.end_date);
+  const [deptFilter, setDeptFilter] = useState('');
+  const [selected, setSelected] = useState(run.employee_ids ?? []);
+
+  const { data: eligibleData, isLoading: eligibleLoading } = useQuery({
+    queryKey: ['eligible-employees', { startDate, endDate }],
+    queryFn: () => getEligibleEmployees({ start_date: startDate, end_date: endDate }).then(r => r.data),
+    enabled: step === 2 && !!startDate && !!endDate,
+  });
+
+  const employees = useMemo(() => {
+    const rows = eligibleData ?? [];
+    return Object.values(
+      rows.reduce((acc, r) => {
+        (acc[r.id] ??= { ...r, contracts: [] }).contracts.push(r);
+        return acc;
+      }, {})
+    );
+  }, [eligibleData]);
+
+  const departments = [...new Set(employees.map(e => e.department_name).filter(Boolean))];
+  const visibleEmployees = deptFilter ? employees.filter(e => e.department_name === deptFilter) : employees;
+
+  const toggle = (id) => setSelected(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  );
+
+  const canContinue = !!startDate && !!endDate && endDate >= startDate;
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      await updatePayRunMeta(run.id, { name, start_date: startDate, end_date: endDate, employee_ids: selected });
+      if (run.status === 'computed') {
+        await computePayRun(run.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pay-run', run.id] });
+      onClose();
+    },
+    onError: (error) => alert(error.message)
+  });
+
+  const handleUpdate = () => {
+    if (run.status === 'computed') {
+      if (!window.confirm("This will delete all current payslips and recompute the pay run. Proceed?")) return;
+    }
+    updateMutation.mutate();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit Pay Run</h3>
+          <button className="btn-ghost btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="wizard-steps" style={{ marginBottom: 24 }}>
+            {['Details', 'Select Employees'].map((label, i) => (
+              <div key={i} className={`wizard-step ${step === i + 1 ? 'active' : step > i + 1 ? 'done' : ''}`}>
+                <div className="wizard-step-dot">{step > i + 1 ? '✓' : i + 1}</div>
+                <div className="wizard-step-label">{label}</div>
+              </div>
+            ))}
+          </div>
+          {step === 1 && (
+            <div className="form-grid cols-1" style={{ gap: 14 }}>
+              <div className="form-group">
+                <label>Name</label>
+                <input className="form-control" value={name} onChange={e => setName(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Start Date <span className="req">*</span></label>
+                <input type="date" className="form-control" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>End Date <span className="req">*</span></label>
+                <input type="date" className="form-control" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              </div>
+              {endDate && startDate && endDate < startDate && (
+                <p style={{ fontSize: 12, color: 'var(--danger)' }}>End date must be on or after the start date.</p>
+              )}
+            </div>
+          )}
+          {step === 2 && (
+            <div>
+              {departments.length > 0 && (
+                <select className="filter-select" style={{ marginBottom: 12 }} value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
+                  <option value="">All Departments</option>
+                  {departments.map(d => <option key={d}>{d}</option>)}
+                </select>
+              )}
+              {eligibleLoading && <p>Loading eligible employees…</p>}
+              {visibleEmployees.map(emp => (
+                <label key={emp.id} className="checkbox-row">
+                  <input type="checkbox" checked={selected.includes(emp.id)} onChange={() => toggle(emp.id)} />
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{emp.first_name} {emp.last_name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{emp.job_position_title} • {emp.department_name}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          {step === 1 && (
+            <button className="btn btn-primary" disabled={!canContinue} onClick={() => setStep(2)}>Continue →</button>
+          )}
+          {step === 2 && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setStep(1)}>← Back</button>
+              <button className="btn btn-primary" disabled={selected.length === 0 || updateMutation.isPending} onClick={handleUpdate}>
+                {updateMutation.isPending ? 'Updating…' : 'Update Pay Run'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PayrunForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,6 +170,7 @@ export default function PayrunForm() {
   const canProcess = ['admin', 'hr_payroll_manager'].includes(currentUser?.role);
 
   const [banner, setBanner] = useState(null); // { type: 'info' | 'danger', text }
+  const [showEdit, setShowEdit] = useState(false);
   const [validateError, setValidateError] = useState(null);
 
   const { data: run, isLoading, isError } = useQuery({
@@ -141,6 +274,11 @@ export default function PayrunForm() {
           </div>
         </div>
         <div className="d-flex gap-2">
+          {canProcess && (status === 'draft' || status === 'computed') && (
+            <button className="btn btn-secondary" onClick={() => setShowEdit(true)}>
+              <Edit2 size={14} /> Edit
+            </button>
+          )}
           {canProcess && status === 'draft' && (
             <button
               className="btn btn-primary"
@@ -174,7 +312,7 @@ export default function PayrunForm() {
               <Mail size={14} /> Send Payslips
             </button>
           )}
-          {canProcess && status === 'draft' && (
+          {canProcess && (status === 'draft' || status === 'computed' || status === 'validated') && (
             <button
               className="btn btn-secondary"
               onClick={handleDelete}
@@ -290,6 +428,7 @@ export default function PayrunForm() {
           </table>
         </div>
       </div>
+      {showEdit && <PayrunEditModal run={run} onClose={() => setShowEdit(false)} />}
     </div>
   );
 }

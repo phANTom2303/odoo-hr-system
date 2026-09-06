@@ -12,5 +12,7 @@ const router = Router();
 router.get('/', requireAuth(...PAYROLL_READ), payslipController.getAll);
 router.get('/:id', requireAuth(...PAYROLL_READ), payslipController.getById);
 router.post('/:id/review', requireAuth(...PAY_RUN_WRITE), payslipController.review);
+router.post('/:id/manual-lines', requireAuth(...PAY_RUN_WRITE), payslipController.addManualLine);
+router.post('/:id/cancel', requireAuth(...PAY_RUN_WRITE), payslipController.cancel);
 
 export default router;
