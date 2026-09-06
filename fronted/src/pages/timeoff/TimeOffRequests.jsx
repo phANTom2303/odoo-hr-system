@@ -1,36 +1,52 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Check, X } from 'lucide-react';
-import { useApp, useAuth } from '../../context/AppContext';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getLeaveRequests, approveLeaveRequest, refuseLeaveRequest } from '../../api/leaveRequests';
 
 export default function TimeOffRequests() {
-  const { timeOffRequests, approveRequest, refuseRequest } = useApp();
-  const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const empFilter = params.get('employee');
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const empFilter = searchParams.get('employee');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
-  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['leave-requests', { empFilter, statusFilter }],
+    queryFn: () => getLeaveRequests({
+      employee_id: empFilter || undefined,
+      status: statusFilter || undefined,
+    }).then(r => r.data),
+  });
 
-  // TODO: The backend should ideally filter requests for the Employee role.
-  const allowedRequests = isEmployeeOnly && currentUser?.employeeId
-    ? timeOffRequests.filter(r => r.employeeId === currentUser.employeeId)
-    : timeOffRequests;
+  const requests = data ?? [];
 
-  const filtered = allowedRequests.filter(r => {
-    const matchEmp = empFilter ? r.employeeId === Number(empFilter) : true;
-    const matchSearch = r.employeeName.toLowerCase().includes(search.toLowerCase()) ||
-      r.typeName.toLowerCase().includes(search.toLowerCase());
-    return matchEmp && matchSearch;
+  const filtered = requests.filter(r =>
+    r.employee_name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.time_off_type_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const approveMutation = useMutation({
+    mutationFn: (id) => approveLeaveRequest(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leave-requests'] }),
+  });
+
+  const refuseMutation = useMutation({
+    mutationFn: (id) => refuseLeaveRequest(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leave-requests'] }),
   });
 
   const statusBadge = (s) => {
-    if (s === 'Approved')   return 'badge-green';
-    if (s === 'Refused')    return 'badge-red';
-    if (s === 'To Approve') return 'badge-yellow';
+    if (s === 'approved')  return 'badge-green';
+    if (s === 'refused')   return 'badge-red';
+    if (s === 'pending')   return 'badge-yellow';
+    if (s === 'withdrawn') return 'badge-gray';
     return 'badge-gray';
   };
+
+  if (isLoading) return <div className="page-header"><p>Loading requests…</p></div>;
+  if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load requests.</p></div>;
 
   return (
     <div>
@@ -49,7 +65,14 @@ export default function TimeOffRequests() {
           <Search size={14} color="var(--gray-400)" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests…" />
         </div>
-        {!isEmployeeOnly && <button className="btn btn-secondary btn-sm">My Team</button>}
+        <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="refused">Refused</option>
+          <option value="withdrawn">Withdrawn</option>
+        </select>
       </div>
 
       <div className="card">
@@ -61,7 +84,7 @@ export default function TimeOffRequests() {
                 <th>Type</th>
                 <th>Start</th>
                 <th>End</th>
-                <th>Duration</th>
+                <th>Days</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -69,31 +92,34 @@ export default function TimeOffRequests() {
             <tbody>
               {filtered.map(r => (
                 <tr key={r.id}>
-                  <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.employeeName}</td>
-                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.typeName}</td>
-                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.startDate}</td>
-                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.endDate}</td>
-                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.duration} Day{r.duration > 1 ? 's' : ''}</td>
+                  <td style={{ fontWeight: 500 }} onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.employee_name}</td>
+                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.time_off_type_name}</td>
+                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.start_date?.slice(0, 10)}</td>
+                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.end_date?.slice(0, 10)}</td>
+                  <td onClick={() => navigate(`/timeoff/requests/${r.id}`)}>{r.number_of_days ?? '—'}</td>
                   <td><span className={`badge ${statusBadge(r.status)}`}>{r.status}</span></td>
                   <td>
-                    {!isEmployeeOnly && (r.status === 'To Approve' || r.status === 'Draft') ? (
+                    {(r.status === 'draft' || r.status === 'pending') && (
                       <div className="d-flex gap-2">
-                        <button className="btn btn-success btn-sm" onClick={() => approveRequest(r.id)}>
+                        <button className="btn btn-success btn-sm" onClick={() => approveMutation.mutate(r.id)}>
                           <Check size={12} /> Approve
                         </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => refuseRequest(r.id)}>
+                        <button className="btn btn-danger btn-sm" onClick={() => refuseMutation.mutate(r.id)}>
                           <X size={12} /> Refuse
                         </button>
                       </div>
-                    ) : '—'}
+                    )}
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 24 }}>No requests found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
         <div style={{ padding: '10px 20px', fontSize: 12, color: 'var(--gray-400)' }}>
-          Request status shows the approval lifecycle clearly.
+          {filtered.length} request{filtered.length !== 1 ? 's' : ''}
         </div>
       </div>
     </div>

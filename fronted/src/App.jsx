@@ -129,7 +129,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppProvider>
+        <AppProvider queryClient={queryClient}>
           <AppShell />
         </AppProvider>
       </BrowserRouter>
