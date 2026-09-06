@@ -1,6 +1,14 @@
 import pg from 'pg';
 
-const { Pool } = pg;
+const { Pool, types } = pg;
+
+// Parse TIMESTAMP WITHOUT TIME ZONE (OID 1114) as UTC ISO strings
+// instead of letting the pg driver apply local timezone offset.
+// Without this, NOW() stored in the DB (UTC) gets misread as local time.
+types.setTypeParser(1114, (val) => new Date(val + 'Z').toISOString());
+
+// Parse TIMESTAMPTZ (OID 1184) consistently as well
+types.setTypeParser(1184, (val) => new Date(val).toISOString());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
