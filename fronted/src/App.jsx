@@ -43,6 +43,9 @@ import SalaryRuleForm       from './pages/payroll/SalaryRuleForm';
 // Dashboard
 import Dashboard from './pages/dashboard/Dashboard';
 
+// Audit Trail
+import AuditTrail from './pages/audit/AuditTrail';
+
 const ADMIN = ['admin'];
 const HR_ALL = ['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'];
 const PAYROLL_ALL = ['hr_payroll_user', 'hr_payroll_manager', 'admin'];
@@ -107,6 +110,7 @@ function AppShell() {
 
           {/* Users (Admin only) */}
           <Route path="/users"                      element={<ProtectedRoute allowedRoles={ADMIN}><UserManagement /></ProtectedRoute>} />
+          <Route path="/audit-trail"                element={<ProtectedRoute allowedRoles={ADMIN}><AuditTrail /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*"                           element={<Navigate to="/employees" replace />} />
