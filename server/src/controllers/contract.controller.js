@@ -5,7 +5,7 @@
 import asyncHandler from '#lib/asyncHandler.js';
 import * as contractService from '#services/contract.service.js';
 import { RESPONSE_CODES } from '#lib/common.js';
-import { NotFoundError } from '#lib/errors.js';
+import { ForbiddenError, NotFoundError } from '#lib/errors.js';
 
 /** GET /api/contracts */
 export const getAll = asyncHandler(async (req, res) => {
@@ -19,6 +19,12 @@ export const getAll = asyncHandler(async (req, res) => {
 export const getById = asyncHandler(async (req, res) => {
     const item = await contractService.getById(req.params.id);
     if (!item) throw new NotFoundError('Contract not found');
+
+    const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(req.user.role);
+    if (!isHR && Number(item.employee_id) !== Number(req.user.sub)) {
+        throw new ForbiddenError('You can only view your own contract.');
+    }
+
     res.status(RESPONSE_CODES.SUCCESS_CODE).json({ success: true, data: item });
 });
 
