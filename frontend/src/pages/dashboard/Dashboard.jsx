@@ -37,9 +37,11 @@ function getPeriodOptions() {
   return opts;
 }
 
-function currentPeriod() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+/** Human label for a 'YYYY-MM' period, e.g. 'Aug 2026'. */
+function periodLabel(value) {
+  const [year, month] = value.split('-').map(Number);
+  return new Date(year, month - 1, 1)
+    .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
 const PERIOD_OPTIONS = getPeriodOptions();
@@ -47,7 +49,10 @@ const PERIOD_OPTIONS = getPeriodOptions();
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const [period, setPeriod]           = useState(currentPeriod());
+  // '' means "let the server choose". It answers with the most recent month
+  // that actually has a pay run, so the dashboard doesn't open on a month whose
+  // payroll hasn't been run yet and read 0 across every payslip-backed section.
+  const [period, setPeriod]           = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [employeeType, setEmployeeType] = useState('');
 
@@ -60,7 +65,7 @@ export default function Dashboard() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['dashboard-summary', { period, departmentId, employeeType }],
     queryFn: () => getDashboardSummary({
-      period,
+      period: period || undefined,
       department_id: departmentId || undefined,
       employee_type: employeeType || undefined,
     }).then(r => r.data),
@@ -68,6 +73,17 @@ export default function Dashboard() {
 
   if (isLoading) return <div className="page-header"><p>Loading dashboard…</p></div>;
   if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load dashboard{error?.message ? `: ${error.message}` : '.'}</p></div>;
+
+  // Until the user picks a period explicitly, the select mirrors whichever
+  // month the server resolved to.
+  const activePeriod = period || data.period;
+  const payrollPeriods = data.payrollPeriods ?? [];
+  const hasPayroll = data.hasPayroll !== false;
+
+  // Keep the resolved period selectable even if it predates the trailing-12 window.
+  const periodOptions = PERIOD_OPTIONS.some(o => o.value === activePeriod)
+    ? PERIOD_OPTIONS
+    : [{ value: activePeriod, label: periodLabel(activePeriod) }, ...PERIOD_OPTIONS];
 
   const kpis = data.kpis;
   const salaryByDepartment = data.salaryByDepartment ?? [];
@@ -119,8 +135,12 @@ export default function Dashboard() {
       <div className="filter-row" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--gray-600)' }}>
           <span>Period</span>
-          <select className="filter-select" value={period} onChange={e => setPeriod(e.target.value)}>
-            {PERIOD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <select className="filter-select" value={activePeriod} onChange={e => setPeriod(e.target.value)}>
+            {periodOptions.map(o => (
+              <option key={o.value} value={o.value}>
+                {payrollPeriods.includes(o.value) ? o.label : `${o.label} — no payroll`}
+              </option>
+            ))}
           </select>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--gray-600)' }}>
@@ -142,6 +162,14 @@ export default function Dashboard() {
           <select className="filter-select"><option>OXP Pvt Ltd</option></select>
         </div>
       </div>
+
+      {!hasPayroll && (
+        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+          <AlertTriangle size={13} />
+          No pay run covers {periodLabel(activePeriod)}, so all payroll figures below read zero.
+          Attendance and time-off figures are unaffected.
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="kpi-grid">

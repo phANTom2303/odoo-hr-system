@@ -356,3 +356,29 @@ export const getTimeOffOverview = async ({ start, end, department_id, employee_t
     const { rows } = await query(sql, values);
     return rows;
 };
+
+/**
+ * Every calendar month ('YYYY-MM') touched by a non-cancelled pay run, ascending.
+ *
+ * Uses the same overlap convention as every other query here: a pay run whose
+ * cycle crosses a month boundary is reported for *each* month it spans, so this
+ * list is exactly the set of periods for which the payslip-scoped queries above
+ * can return non-zero data. Deliberately NOT filtered by department/employee
+ * type — the period selector must stay stable while the user changes filters.
+ * @returns {Promise<string[]>}
+ */
+export const getPayrollPeriods = async () => {
+    const sql = `
+        SELECT DISTINCT to_char(m, 'YYYY-MM') AS period
+        FROM pay_runs pr
+        CROSS JOIN LATERAL generate_series(
+            date_trunc('month', pr.start_date),
+            date_trunc('month', pr.end_date),
+            interval '1 month'
+        ) m
+        WHERE pr.status <> 'cancelled'
+        ORDER BY period;
+    `;
+    const { rows } = await query(sql);
+    return rows.map((r) => r.period);
+};

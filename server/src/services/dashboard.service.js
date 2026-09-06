@@ -59,13 +59,30 @@ const trailingPeriods = (period) => {
 };
 
 /**
- * Default period: the current server month as 'YYYY-MM'.
+ * The current server month as 'YYYY-MM'.
  * @returns {string}
  */
 const currentPeriod = () => {
     const now = new Date();
     return formatPeriod(now.getUTCFullYear(), now.getUTCMonth() + 1);
 };
+
+/**
+ * Resolves the period to report on when the caller didn't pin one.
+ *
+ * NOT simply "the current calendar month": payroll for the running month is
+ * normally not processed until it closes, so on any day before that month's pay
+ * run exists, every payslip-scoped section (salary total, payslip counts, per-
+ * department cost, status breakdown, payroll alerts) would correctly but
+ * uselessly read 0 — while the 6-month trend chart beside them still showed the
+ * previous months' data, making the dashboard look broken rather than empty.
+ * Default to the most recent month that actually has payroll instead, and fall
+ * back to the current month only when there is no payroll at all.
+ * @param {string[]} payrollPeriods - ascending 'YYYY-MM' list from the repo.
+ * @returns {string}
+ */
+const defaultPeriod = (payrollPeriods) =>
+    payrollPeriods.at(-1) ?? currentPeriod();
 
 /**
  * Builds the dashboard summary payload for a given month/department/employee-type slice.
@@ -76,7 +93,11 @@ const currentPeriod = () => {
  * @returns {Promise<object>}
  */
 export const getSummary = async ({ period, department_id, employee_type } = {}) => {
-    const resolvedPeriod = period || currentPeriod();
+    // Fetched first (not inside the Promise.all below) because it decides which
+    // period every other query is scoped to when the caller didn't pin one.
+    const payrollPeriods = await dashboardRepo.getPayrollPeriods();
+
+    const resolvedPeriod = period || defaultPeriod(payrollPeriods);
     const { start, end } = monthBounds(resolvedPeriod);
     const periods = trailingPeriods(resolvedPeriod); // 6 ascending, periods[5] === resolvedPeriod
 
@@ -185,6 +206,10 @@ export const getSummary = async ({ period, department_id, employee_type } = {}) 
 
     return {
         period: resolvedPeriod,
+        // Every month that has a pay run, so the client can flag a selected
+        // period whose zeros mean "no payroll yet" rather than "no data found".
+        payrollPeriods,
+        hasPayroll: payrollPeriods.includes(resolvedPeriod),
         filters: {
             department_id: department_id ? Number(department_id) : null,
             employee_type: employee_type || null,
