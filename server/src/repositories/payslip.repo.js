@@ -141,7 +141,8 @@ export const insertPayslipWithLines = async ({
  * @param {object} [filters]
  * @param {number|string} [filters.pay_run_id]
  * @param {number|string} [filters.employee_id]
- * @param {string} [filters.status]
+ * @param {string|string[]} [filters.status] - A single status, or a set of them
+ *   (the employee self-service view passes the finalised statuses).
  * @returns {Promise<object[]>}
  */
 export const findAll = async ({ pay_run_id, employee_id, status } = {}) => {
@@ -156,7 +157,10 @@ export const findAll = async ({ pay_run_id, employee_id, status } = {}) => {
         conditions.push(`ps.employee_id = $${values.length + 1}`);
         values.push(Number(employee_id));
     }
-    if (status) {
+    if (Array.isArray(status)) {
+        conditions.push(`ps.status = ANY($${values.length + 1})`);
+        values.push(status);
+    } else if (status) {
         conditions.push(`ps.status = $${values.length + 1}`);
         values.push(status);
     }

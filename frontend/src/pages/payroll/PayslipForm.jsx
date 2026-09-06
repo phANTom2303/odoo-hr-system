@@ -181,6 +181,10 @@ export default function PayslipForm() {
   const [manualCategory, setManualCategory] = useState('allowance');
   const [showPrint, setShowPrint] = useState(false);
   const canProcess = ['admin', 'hr_payroll_manager'].includes(currentUser?.role);
+  // Employees reach this page through the self-service Payslips tab: they get
+  // the payslip itself, without the payroll-desk chrome (warnings, review
+  // state, contract ids) or the back-link into a pay run they cannot open.
+  const isPayroll = ['hr_payroll_user', 'hr_payroll_manager', 'admin'].includes(currentUser?.role);
 
   const { data: slip, isLoading, isError, error } = useQuery({
     queryKey: ['payslip', id],
@@ -241,26 +245,34 @@ export default function PayslipForm() {
   const totalDeductions = n(slip.total_deductions);
   const net = n(slip.net_salary);
 
-  const warnings = slip.warnings ?? [];
+  const warnings = isPayroll ? (slip.warnings ?? []) : [];
   const hasErrorWarning = warnings.some(w => w.severity === 'error');
-  const canReview = !slip.is_reviewed && slip.status !== 'paid' && slip.status !== 'cancelled';
+  const canReview = isPayroll && !slip.is_reviewed && slip.status !== 'paid' && slip.status !== 'cancelled';
   const canCancel = canProcess && (slip.status === 'draft' || slip.status === 'computed');
 
   return (
     <div>
       <div className="page-breadcrumb" style={{ marginBottom: 8 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/payroll/runs/${slip.pay_run_id}`)}>
-          <ArrowLeft size={14} /> {slip.pay_run_name}
-        </button>
-        <span> / {slip.employee_name}</span>
+        {isPayroll ? (
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/payroll/runs/${slip.pay_run_id}`)}>
+              <ArrowLeft size={14} /> {slip.pay_run_name}
+            </button>
+            <span> / {slip.employee_name}</span>
+          </>
+        ) : (
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/payroll/payslips')}>
+            <ArrowLeft size={14} /> My Payslips
+          </button>
+        )}
       </div>
 
       <div className="page-header">
         <div>
-          <h1>Payslip — {slip.employee_name}</h1>
+          <h1>Payslip — {isPayroll ? slip.employee_name : slip.pay_run_name}</h1>
           <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center' }}>
             <span className={`badge ${statusBadge(slip.status)}`}>{slip.status}</span>
-            {slip.is_reviewed && <span className="badge badge-green">Reviewed</span>}
+            {isPayroll && slip.is_reviewed && <span className="badge badge-green">Reviewed</span>}
             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>
               {slip.start_date} – {slip.end_date}{slip.structure_name ? ` • ${slip.structure_name}` : ''}
             </span>
@@ -344,7 +356,7 @@ export default function PayslipForm() {
             <div className="card" key={seg.key} style={{ marginBottom: 16 }}>
               <div className="card-header">
                 <h3>Segment: {seg.segment_start} to {seg.segment_end}</h3>
-                <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>Contract #{seg.contract_id}</div>
+                {isPayroll && <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>Contract #{seg.contract_id}</div>}
               </div>
               <div className="table-wrap">
                 <table className="salary-table">
