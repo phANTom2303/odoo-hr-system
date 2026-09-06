@@ -1,19 +1,40 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useState, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPayRuns, getEligibleEmployees, createPayRun, n } from '../../api/payroll';
+import { useAuth } from '../../context/AppContext';
+
+const CAN_MANAGE_RUNS = ['hr_payroll_user', 'hr_payroll_manager', 'admin'];
+
+const STATUS_BADGE = {
+  paid: 'badge-green',
+  validated: 'badge-blue',
+  computed: 'badge-yellow',
+  draft: 'badge-gray',
+  cancelled: 'badge-red',
+};
 
 export default function PayrunList() {
-  const { payruns } = useApp();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
   const [showWizard, setShowWizard] = useState(false);
 
-  const statusBadge = (s) => {
-    if (s === 'Paid')      return 'badge-green';
-    if (s === 'Validated') return 'badge-blue';
-    if (s === 'Draft')     return 'badge-gray';
-    return 'badge-yellow';
-  };
+  const canManageRuns = CAN_MANAGE_RUNS.includes(currentUser?.role);
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['pay-runs', { status }],
+    queryFn: () => getPayRuns(status ? { status } : {}).then(r => r.data),
+  });
+
+  const payruns = data ?? [];
+  const filtered = payruns.filter(p => p.name?.toLowerCase().includes(search.toLowerCase()));
+
+  if (isLoading) return <div className="page-header"><p>Loading pay runs…</p></div>;
+  if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load pay runs: {error.message}</p></div>;
 
   return (
     <div>
@@ -22,9 +43,26 @@ export default function PayrunList() {
           <div className="page-breadcrumb">Payroll ▸ <span>Pay Runs</span></div>
           <h1>Pay Runs</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
-          <Plus size={15} /> New Pay Run
-        </button>
+        {canManageRuns && (
+          <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
+            <Plus size={15} /> New Pay Run
+          </button>
+        )}
+      </div>
+
+      <div className="toolbar">
+        <div className="search-bar">
+          <Search size={14} color="var(--gray-400)" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pay runs…" />
+        </div>
+        <select className="filter-select" value={status} onChange={e => setStatus(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="computed">Computed</option>
+          <option value="validated">Validated</option>
+          <option value="paid">Paid</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
       </div>
 
       <div className="card">
@@ -33,7 +71,6 @@ export default function PayrunList() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Salary Structure</th>
                 <th>Period</th>
                 <th>Employees</th>
                 <th>Total Net</th>
@@ -41,14 +78,13 @@ export default function PayrunList() {
               </tr>
             </thead>
             <tbody>
-              {payruns.map(p => (
+              {filtered.map(p => (
                 <tr key={p.id} onClick={() => navigate(`/payroll/runs/${p.id}`)}>
                   <td className="font-mono" style={{ fontWeight: 600 }}>{p.name}</td>
-                  <td>{p.structure}</td>
-                  <td>{p.period}</td>
-                  <td>{p.employeeCount}</td>
-                  <td>₹ {p.totalNet.toLocaleString('en-IN')}</td>
-                  <td><span className={`badge ${statusBadge(p.status)}`}>{p.status}</span></td>
+                  <td>{p.start_date} → {p.end_date}</td>
+                  <td>{p.employee_count}</td>
+                  <td>₹ {n(p.total_net).toLocaleString('en-IN')}</td>
+                  <td><span className={`badge ${STATUS_BADGE[p.status] || 'badge-gray'}`}>{p.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -62,53 +98,54 @@ export default function PayrunList() {
 }
 
 function PayrunWizard({ onClose }) {
-  const { salaryStructures, employees, setPayruns, setPayslips, payslips, salaryRules } = useApp();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ structure: 'Employee Salary', period: '2026-10', periodLabel: 'Oct 2026' });
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
   const [selected, setSelected] = useState([]);
+
+  const { data: eligibleData, isLoading: eligibleLoading, isError: eligibleError } = useQuery({
+    queryKey: ['eligible-employees', { startDate, endDate }],
+    queryFn: () => getEligibleEmployees({ start_date: startDate, end_date: endDate }).then(r => r.data),
+    enabled: step === 2 && !!startDate && !!endDate,
+  });
+
+  const employees = useMemo(() => {
+    const rows = eligibleData ?? [];
+    return Object.values(
+      rows.reduce((acc, r) => {
+        (acc[r.id] ??= { ...r, contracts: [] }).contracts.push(r);
+        return acc;
+      }, {})
+    );
+  }, [eligibleData]);
+
+  const departments = [...new Set(employees.map(e => e.department_name).filter(Boolean))];
+  const visibleEmployees = deptFilter ? employees.filter(e => e.department_name === deptFilter) : employees;
 
   const toggle = (id) => setSelected(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   );
 
-  const create = () => {
-    const name = `PR/${form.periodLabel.split(' ')[1]}/${form.periodLabel.split(' ')[0].slice(0,3).toUpperCase()}`;
-    const newId = Date.now();
-    setPayruns(prev => prev.map(p => p.status === 'Draft' ? { ...p, status: 'Draft' } : p).concat([{
-      id: newId,
-      name,
-      structure: form.structure,
-      period: form.periodLabel,
-      status: 'Draft',
-      employeeCount: selected.length,
-      totalNet: 0,
-    }]));
-    // Create draft payslips
-    const newSlips = selected.map(empId => {
-      const emp = employees.find(e => e.id === empId);
-      return {
-        id: Date.now() + empId,
-        payrunId: newId,
-        payrunName: name,
-        employeeId: empId,
-        employeeName: emp?.name || '',
-        structure: form.structure,
-        period: form.periodLabel,
-        status: 'Draft',
-        workedDays: 22,
-        lines: [],
-      };
-    });
-    setPayslips(prev => [...prev, ...newSlips]);
-    onClose();
-    navigate(`/payroll/runs`);
-  };
+  const canContinue = !!startDate && !!endDate && endDate >= startDate;
 
-  const months = [
-    'Jan 2026','Feb 2026','Mar 2026','Apr 2026','May 2026','Jun 2026',
-    'Jul 2026','Aug 2026','Sep 2026','Oct 2026','Nov 2026','Dec 2026',
-  ];
+  const mutation = useMutation({
+    mutationFn: () => createPayRun({
+      start_date: startDate,
+      end_date: endDate,
+      employee_ids: selected,
+    }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['pay-runs'] });
+      onClose();
+      navigate(`/payroll/runs/${res.data.id}`);
+    },
+    onError: (error) => {
+      alert(error.message || 'Failed to create pay run');
+    },
+  });
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -119,7 +156,7 @@ function PayrunWizard({ onClose }) {
         </div>
         <div className="modal-body">
           <div className="wizard-steps" style={{ marginBottom: 24 }}>
-            {['Scope & Period', 'Select Employees'].map((label, i) => (
+            {['Period', 'Select Employees'].map((label, i) => (
               <div key={i} className={`wizard-step ${step === i + 1 ? 'active' : step > i + 1 ? 'done' : ''}`}>
                 <div className="wizard-step-dot">{step > i + 1 ? '✓' : i + 1}</div>
                 <div className="wizard-step-label">{label}</div>
@@ -130,17 +167,26 @@ function PayrunWizard({ onClose }) {
           {step === 1 && (
             <div className="form-grid cols-1" style={{ gap: 14 }}>
               <div className="form-group">
-                <label>Salary Structure <span className="req">*</span></label>
-                <select className="form-control" value={form.structure} onChange={e => setForm(f => ({ ...f, structure: e.target.value }))}>
-                  {salaryStructures.filter(s => s.status === 'Active').map(s => <option key={s.id}>{s.name}</option>)}
-                </select>
+                <label>Start Date <span className="req">*</span></label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
               </div>
               <div className="form-group">
-                <label>Payroll Period <span className="req">*</span></label>
-                <select className="form-control" value={form.periodLabel} onChange={e => setForm(f => ({ ...f, periodLabel: e.target.value }))}>
-                  {months.map(m => <option key={m}>{m}</option>)}
-                </select>
+                <label>End Date <span className="req">*</span></label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                />
               </div>
+              {endDate && startDate && endDate < startDate && (
+                <p style={{ fontSize: 12, color: 'var(--danger)' }}>End date must be on or after the start date.</p>
+              )}
             </div>
           )}
 
@@ -149,12 +195,34 @@ function PayrunWizard({ onClose }) {
               <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 12 }}>
                 Select employees to include in this pay run:
               </p>
-              {employees.filter(e => e.status === 'Active').map(emp => (
+
+              {departments.length > 0 && (
+                <select className="filter-select" style={{ marginBottom: 12 }} value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
+                  <option value="">All Departments</option>
+                  {departments.map(d => <option key={d}>{d}</option>)}
+                </select>
+              )}
+
+              {eligibleLoading && <p>Loading eligible employees…</p>}
+              {eligibleError && <p style={{ color: 'var(--danger)' }}>Failed to load eligible employees.</p>}
+              {!eligibleLoading && !eligibleError && visibleEmployees.length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--gray-500)' }}>No eligible employees found for this period.</p>
+              )}
+
+              {visibleEmployees.map(emp => (
                 <label key={emp.id} className="checkbox-row">
                   <input type="checkbox" checked={selected.includes(emp.id)} onChange={() => toggle(emp.id)} />
                   <div>
-                    <div style={{ fontWeight: 500 }}>{emp.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{emp.jobTitle} • {emp.department}</div>
+                    <div style={{ fontWeight: 500 }}>{emp.first_name} {emp.last_name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{emp.job_position_title} • {emp.department_name}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                      {emp.contract_count > 1 && (
+                        <span className="badge badge-blue">will be prorated</span>
+                      )}
+                      {emp.has_overlapping_payslip && (
+                        <span className="badge badge-red">already has a payslip this period</span>
+                      )}
+                    </div>
                   </div>
                 </label>
               ))}
@@ -164,13 +232,17 @@ function PayrunWizard({ onClose }) {
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           {step === 1 && (
-            <button className="btn btn-primary" onClick={() => setStep(2)}>Continue →</button>
+            <button className="btn btn-primary" disabled={!canContinue} onClick={() => setStep(2)}>Continue →</button>
           )}
           {step === 2 && (
             <>
               <button className="btn btn-secondary" onClick={() => setStep(1)}>← Back</button>
-              <button className="btn btn-primary" disabled={selected.length === 0} onClick={create}>
-                Create Pay Run ({selected.length} employees)
+              <button
+                className="btn btn-primary"
+                disabled={selected.length === 0 || mutation.isPending}
+                onClick={() => mutation.mutate()}
+              >
+                {mutation.isPending ? 'Creating…' : `Create Payrun (${selected.length} employees)`}
               </button>
             </>
           )}

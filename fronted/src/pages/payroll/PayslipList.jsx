@@ -1,31 +1,45 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { useApp, useAuth } from '../../context/AppContext';
+import { useQuery } from '@tanstack/react-query';
+import { getPayslips, n } from '../../api/payroll';
+
+const STATUS_OPTIONS = ['computed', 'validated', 'paid'];
 
 export default function PayslipList() {
-  const { payslips } = useApp();
-  const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const payRunId = params.get('pay_run_id');
+  const statusParam = params.get('status');
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState(statusParam || '');
 
-  const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
-  
-  // TODO: Backend should enforce this filtering.
-  const allowedPayslips = (isEmployeeOnly && currentUser?.employeeId)
-    ? payslips.filter(p => p.employeeId === currentUser.employeeId)
-    : payslips;
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['payslips', { payRunId, status }],
+    queryFn: () =>
+      getPayslips({
+        ...(payRunId ? { pay_run_id: payRunId } : {}),
+        ...(status ? { status } : {}),
+      }).then(r => r.data),
+  });
 
-  const filtered = allowedPayslips.filter(s =>
-    s.employeeName.toLowerCase().includes(search.toLowerCase()) ||
-    s.period.toLowerCase().includes(search.toLowerCase()) ||
-    s.payrunName.toLowerCase().includes(search.toLowerCase())
-  );
+  const payslips = data ?? [];
+
+  const searchTerm = search.toLowerCase();
+  const filtered = payslips.filter(s => {
+    if (searchTerm.length >= 1) {
+      return (
+        s.employee_name?.toLowerCase().includes(searchTerm) ||
+        s.pay_run_name?.toLowerCase().includes(searchTerm)
+      );
+    }
+    return true;
+  });
 
   const statusBadge = (s) => {
-    if (s === 'Paid')      return 'badge-green';
-    if (s === 'Validated') return 'badge-blue';
-    if (s === 'Computed')  return 'badge-yellow';
+    if (s === 'paid') return 'badge-green';
+    if (s === 'validated') return 'badge-blue';
+    if (s === 'computed') return 'badge-yellow';
     return 'badge-gray';
   };
 
@@ -43,44 +57,47 @@ export default function PayslipList() {
           <Search size={14} color="var(--gray-400)" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search payslips…" />
         </div>
-        <select className="filter-select">
-          <option>All Periods</option>
-          {[...new Set(payslips.map(s => s.period))].map(p => <option key={p}>{p}</option>)}
+        <select className="filter-select" value={status} onChange={e => setStatus(e.target.value)}>
+          <option value="">All Statuses</option>
+          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
       <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Structure</th>
-                <th>Pay Run</th>
-                <th>Period</th>
-                <th>Worked Days</th>
-                <th>Net Salary</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(s => {
-                const net = s.lines?.find(l => l.code === 'NET')?.amount || 0;
-                return (
+        {isLoading ? (
+          <div className="card-body"><p>Loading…</p></div>
+        ) : isError ? (
+          <div className="card-body"><p style={{ color: 'var(--danger)' }}>Failed to load payslips: {error.message}</p></div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Structure</th>
+                  <th>Pay Run</th>
+                  <th>Period</th>
+                  <th>Worked Days</th>
+                  <th>Net Salary</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(s => (
                   <tr key={s.id} onClick={() => navigate(`/payroll/payslips/${s.id}`)}>
-                    <td style={{ fontWeight: 500 }}>{s.employeeName}</td>
-                    <td>{s.structure}</td>
-                    <td className="font-mono">{s.payrunName}</td>
-                    <td>{s.period}</td>
-                    <td>{s.workedDays}</td>
-                    <td style={{ fontWeight: 600 }}>₹ {net.toLocaleString('en-IN')}</td>
+                    <td style={{ fontWeight: 500 }}>{s.employee_name}</td>
+                    <td>{s.structure_name || '—'}</td>
+                    <td className="font-mono">{s.pay_run_name}</td>
+                    <td>{s.start_date} – {s.end_date}</td>
+                    <td>{n(s.worked_days)}</td>
+                    <td style={{ fontWeight: 600 }}>₹ {n(s.net_salary).toLocaleString('en-IN')}</td>
                     <td><span className={`badge ${statusBadge(s.status)}`}>{s.status}</span></td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

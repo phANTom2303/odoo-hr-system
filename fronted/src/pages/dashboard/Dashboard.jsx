@@ -1,90 +1,116 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
 } from 'recharts';
 import { AlertTriangle, Clock, Calendar, DollarSign } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { getEmployees } from '../../api/employees';
-import { getAttendance } from '../../api/attendance';
-import { getLeaveRequests } from '../../api/leaveRequests';
-import { getAllocations } from '../../api/allocations';
+import { getDashboardSummary } from '../../api/dashboard';
+import { getDepartments } from '../../api/departments';
 
 const BAR_COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#7c3aed','#be185d'];
+
+const EMPLOYEE_TYPES = [
+  { value: 'full_time', label: 'Full-time' },
+  { value: 'part_time', label: 'Part-time' },
+  { value: 'contract',  label: 'Contract' },
+  { value: 'intern',    label: 'Intern' },
+];
+
 const fmt = (n) => n >= 100000
   ? `₹ ${(n / 100000).toFixed(1)}L`
   : `₹ ${n.toLocaleString('en-IN')}`;
 
+const fmtPct = (v) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`);
+
+/** Trailing 12 months ending at the current real month, oldest first. */
+function getPeriodOptions() {
+  const now = new Date();
+  const opts = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    opts.push({ value, label });
+  }
+  return opts;
+}
+
+function currentPeriod() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+const PERIOD_OPTIONS = getPeriodOptions();
+
 export default function Dashboard() {
-  const [dept, setDept] = useState('All Departments');
+  const navigate = useNavigate();
 
-  const { data: employees = [] } = useQuery({
-    queryKey: ['employees'],
-    queryFn: () => getEmployees().then(r => r.data),
+  const [period, setPeriod]           = useState(currentPeriod());
+  const [departmentId, setDepartmentId] = useState('');
+  const [employeeType, setEmployeeType] = useState('');
+
+  const { data: depts } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => getDepartments().then(r => r.data),
+  });
+  const departments = depts ?? [];
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['dashboard-summary', { period, departmentId, employeeType }],
+    queryFn: () => getDashboardSummary({
+      period,
+      department_id: departmentId || undefined,
+      employee_type: employeeType || undefined,
+    }).then(r => r.data),
   });
 
-  const { data: attendance = [] } = useQuery({
-    queryKey: ['attendance', {}],
-    queryFn: () => getAttendance().then(r => r.data),
-  });
+  if (isLoading) return <div className="page-header"><p>Loading dashboard…</p></div>;
+  if (isError)   return <div className="page-header"><p style={{ color: 'var(--danger)' }}>Failed to load dashboard{error?.message ? `: ${error.message}` : '.'}</p></div>;
 
-  const { data: leaveRequests = [] } = useQuery({
-    queryKey: ['leave-requests', {}],
-    queryFn: () => getLeaveRequests().then(r => r.data),
-  });
+  const kpis = data.kpis;
+  const salaryByDepartment = data.salaryByDepartment ?? [];
+  const monthlySalaryTrend = data.monthlySalaryTrend ?? [];
+  const payslipStatusCounts = data.payslipStatusCounts ?? {};
+  const alerts = data.alerts ?? {};
+  const attendanceOverview = data.attendanceOverview ?? {};
+  const timeOffOverview = data.timeOffOverview ?? [];
+  const departmentOverview = data.departmentOverview ?? [];
 
-  const { data: allocations = [] } = useQuery({
-    queryKey: ['allocations', {}],
-    queryFn: () => getAllocations().then(r => r.data),
-  });
+  const changePct = fmtPct(kpis.totalNetSalaryChangePct);
 
-  // ── KPI calculations ────────────────────────────────────────
-  const presentCount  = attendance.filter(a => a.status === 'present' || a.status === 'Late').length;
-  const attHealth     = attendance.length ? Math.round((presentCount / attendance.length) * 100) : 0;
-  const missingCO     = attendance.filter(a => a.check_in && !a.check_out).length;
-  const approvedDays  = leaveRequests
-    .filter(r => r.status === 'approved')
-    .reduce((s, r) => s + Number(r.number_of_days || 0), 0);
-  const pendingLeave  = leaveRequests.filter(r => r.status === 'pending' || r.status === 'draft').length;
-
-  // ── Department overview ─────────────────────────────────────
-  const depts = [...new Set(employees.map(e => e.department).filter(Boolean))];
-  const deptOverview = depts.map(d => ({
-    dept:      d,
-    headcount: employees.filter(e => e.department === d).length,
-  }));
-
-  // ── Attendance status breakdown ─────────────────────────────
-  const attBreakdown = [
-    { label: 'Present',  value: attendance.filter(a => a.status === 'present').length,  color: 'var(--success)' },
-    { label: 'Absent',   value: attendance.filter(a => a.status === 'absent').length,   color: 'var(--danger)'  },
-    { label: 'On Leave', value: attendance.filter(a => a.status === 'on_leave').length, color: 'var(--warning)' },
-    { label: 'Holiday',  value: attendance.filter(a => a.status === 'holiday').length,  color: 'var(--primary)' },
-  ];
-
-  // ── Time off by type ────────────────────────────────────────
-  const toTypes = [...new Set(leaveRequests.map(r => r.time_off_type_name).filter(Boolean))];
-  const toOverview = toTypes.map(type => {
-    const approved = leaveRequests
-      .filter(r => r.time_off_type_name === type && r.status === 'approved')
-      .reduce((s, r) => s + (r.number_of_days || 0), 0);
-    const pending = leaveRequests
-      .filter(r => r.time_off_type_name === type && (r.status === 'pending' || r.status === 'draft'))
-      .length;
-    const alloc = allocations
-      .filter(a => a.time_off_type_name === type && a.status === 'approved')
-      .reduce((s, a) => s + Number(a.remaining || 0), 0);
-    return { type, approved, pending, remaining: alloc };
-  });
+  const alertList = [
+    alerts.missingBankAccounts > 0 && {
+      type: 'danger',
+      msg: `${alerts.missingBankAccounts} employees missing bank account`,
+      onClick: () => navigate('/employees'),
+    },
+    alerts.duplicatePayslipWarnings > 0 && {
+      type: 'danger',
+      msg: `${alerts.duplicatePayslipWarnings} duplicate payslip warning${alerts.duplicatePayslipWarnings === 1 ? '' : 's'}`,
+      onClick: () => navigate('/payroll/payslips'),
+    },
+    alerts.draftsNotValidated > 0 && {
+      type: 'warning',
+      msg: `${alerts.draftsNotValidated} drafts still not validated`,
+      onClick: () => navigate('/payroll/payslips?status=draft'),
+    },
+    alerts.contractsExpiringSoon > 0 && {
+      type: 'warning',
+      msg: `${alerts.contractsExpiringSoon} contracts expiring this month`,
+      onClick: () => navigate('/contracts'),
+    },
+  ].filter(Boolean);
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <div className="page-breadcrumb">HR ▸ <span>Dashboard</span></div>
-          <h1>HR Dashboard</h1>
+          <div className="page-breadcrumb">HR ▸ <span>Payroll Dashboard</span></div>
+          <h1>Payroll Dashboard</h1>
           <p style={{ fontSize: 13, color: 'var(--gray-400)', marginTop: 2 }}>
-            Live overview of headcount, attendance, and time off.
+            Payments, staffing impact, leave patterns, and attendance quality for the selected period.
           </p>
         </div>
       </div>
@@ -92,84 +118,177 @@ export default function Dashboard() {
       {/* Filters */}
       <div className="filter-row" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--gray-600)' }}>
-          <span>Department</span>
-          <select className="filter-select" value={dept} onChange={e => setDept(e.target.value)}>
-            <option>All Departments</option>
-            {depts.map(d => <option key={d}>{d}</option>)}
+          <span>Period</span>
+          <select className="filter-select" value={period} onChange={e => setPeriod(e.target.value)}>
+            {PERIOD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--gray-600)' }}>
+          <span>Department</span>
+          <select className="filter-select" value={departmentId} onChange={e => setDepartmentId(e.target.value)}>
+            <option value="">All Departments</option>
+            {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--gray-600)' }}>
+          <span>Employee Type</span>
+          <select className="filter-select" value={employeeType} onChange={e => setEmployeeType(e.target.value)}>
+            <option value="">All Types</option>
+            {EMPLOYEE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--gray-600)' }}>
+          <span>Company</span>
+          <select className="filter-select"><option>OXP Pvt Ltd</option></select>
         </div>
       </div>
 
       {/* KPI Cards */}
       <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-label"><DollarSign size={11} style={{ display: 'inline' }} /> Total Employees</div>
-          <div className="kpi-value">{employees.length}</div>
-          <div className="kpi-sub">{employees.filter(e => e.is_active).length} active</div>
+        <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/payroll/payslips?status=paid')}>
+          <div className="kpi-label"><DollarSign size={11} style={{ display:'inline' }} /> Total Net Salary Paid</div>
+          <div className="kpi-value">{fmt(kpis.totalNetSalary ?? 0)}</div>
+          <div className={`kpi-sub ${changePct == null ? '' : kpis.totalNetSalaryChangePct >= 0 ? 'up' : 'down'}`}>
+            {changePct == null ? '—' : `${changePct} vs previous month`}
+          </div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label"><Clock size={11} style={{ display: 'inline' }} /> Attendance Health</div>
-          <div className="kpi-value">{attHealth}%</div>
-          <div className="kpi-sub">{presentCount} present of {attendance.length} records</div>
+        <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/payroll/payslips')}>
+          <div className="kpi-label">Payslips Generated</div>
+          <div className="kpi-value">{kpis.payslipsGenerated ?? 0}</div>
+          <div className="kpi-sub">{kpis.payslipsPaid ?? 0} paid, {kpis.payslipsPending ?? 0} pending</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Missing Check-Outs</div>
-          <div className="kpi-value" style={{ color: missingCO > 0 ? 'var(--danger)' : 'var(--success)' }}>{missingCO}</div>
-          <div className="kpi-sub">Incomplete attendance records</div>
+        <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/payroll/payslips?status=paid')}>
+          <div className="kpi-label">Avg Salary / Employee</div>
+          <div className="kpi-value">{fmt(kpis.avgSalaryPerEmployee ?? 0)}</div>
+          <div className="kpi-sub">Based on current pay run</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label"><Calendar size={11} style={{ display: 'inline' }} /> Approved Leave Days</div>
-          <div className="kpi-value">{approvedDays}</div>
-          <div className="kpi-sub">{pendingLeave} pending approval</div>
+        <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/timeoff/requests?status=approved')}>
+          <div className="kpi-label"><Calendar size={11} style={{ display:'inline' }} /> Approved Time Off Days</div>
+          <div className="kpi-value">{kpis.approvedTimeOffDays ?? 0}</div>
+          <div className="kpi-sub">Across selected period</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Departments</div>
-          <div className="kpi-value">{depts.length}</div>
-          <div className="kpi-sub">Across all employees</div>
+        <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/attendance')}>
+          <div className="kpi-label"><Clock size={11} style={{ display:'inline' }} /> Attendance Health</div>
+          <div className="kpi-value">{kpis.attendanceHealthPct ?? 0}%</div>
+          <div className="kpi-sub">Present / reviewed records</div>
         </div>
       </div>
 
       {/* Charts Row */}
       <div className="charts-row">
         <div className="chart-card">
-          <h3>Headcount by Department</h3>
-          <div className="chart-sub">Source: Employees</div>
+          <h3>Salary Cost by Department</h3>
+          <div className="chart-sub">Source: Payslips + Employee Department</div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={deptOverview} margin={{ top: 4, right: 10, left: 10, bottom: 0 }}>
+            <BarChart
+              data={salaryByDepartment}
+              margin={{ top: 4, right: 10, left: 10, bottom: 0 }}
+              onClick={(state) => {
+                const label = state?.activeLabel;
+                if (label) navigate(`/employees?department=${encodeURIComponent(label)}`);
+              }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-100)" />
-              <XAxis dataKey="dept" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="headcount" radius={[4, 4, 0, 0]}>
-                {deptOverview.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
+              <XAxis dataKey="department" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} />
+              <Tooltip formatter={v => [`₹ ${v.toLocaleString('en-IN')}`, 'Net Salary']} />
+              <Bar
+                dataKey="amount"
+                radius={[4, 4, 0, 0]}
+                style={{ cursor: 'pointer' }}
+                onClick={(entry) => {
+                  if (entry?.department) navigate(`/employees?department=${encodeURIComponent(entry.department)}`);
+                }}
+              >
+                {salaryByDepartment.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card">
-          <h3>Attendance Overview</h3>
-          <div className="chart-sub">Source: Attendance records</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
-            {attBreakdown.map(item => (
-              <div key={item.label} style={{ padding: '14px', background: 'var(--gray-50)', borderRadius: 8 }}>
-                <div style={{ fontSize: 26, fontWeight: 700, color: item.color }}>{item.value}</div>
-                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>{item.label}</div>
+          <h3>Monthly Net Salary Trend</h3>
+          <div className="chart-sub">Source: historical Payslips / Payruns</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart
+              data={monthlySalaryTrend}
+              margin={{ top: 4, right: 10, left: 10, bottom: 0 }}
+              style={{ cursor: 'pointer' }}
+              onClick={() => navigate('/payroll/runs')}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-100)" />
+              <XAxis dataKey="monthLabel" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/100000).toFixed(1)}L`} />
+              <Tooltip formatter={v => [fmt(v), 'Net Salary']} />
+              <Line type="monotone" dataKey="amount" stroke="var(--primary)" strokeWidth={2} dot={{ r: 4, fill: 'var(--primary)' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Alerts + Payslip Status */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        <div className="chart-card">
+          <h3>Payslip Status & Payroll Alerts</h3>
+          <div className="chart-sub">Source: Pay Run + Payslip validation</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+            {Object.entries(payslipStatusCounts).map(([status, count]) => (
+              <div
+                key={status}
+                style={{ padding: '10px 14px', background: 'var(--gray-50)', borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => navigate(`/payroll/payslips?status=${status}`)}
+              >
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{count}</div>
+                <div style={{ fontSize: 12, color: 'var(--gray-500)', textTransform: 'capitalize' }}>{status}</div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 14, fontSize: 12, color: 'var(--gray-500)', lineHeight: 1.8 }}>
-            Missing check-outs: <strong>{missingCO}</strong><br />
-            Attendance coverage: <strong>{attHealth}%</strong>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-600)', marginBottom: 8 }}>Current Alerts</div>
+          {alertList.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--gray-400)' }}>No active alerts</div>
+          ) : (
+            alertList.map((a, i) => (
+              <div key={i} className={`alert alert-${a.type}`} style={{ cursor: 'pointer' }} onClick={a.onClick}>
+                <AlertTriangle size={13} />
+                {a.msg}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="chart-card">
+          <h3>Attendance Overview</h3>
+          <div className="chart-sub">Source: Attendance</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            {[
+              { label: 'Present',  value: attendanceOverview.present ?? 0,  color: 'var(--success)', onClick: () => navigate('/attendance?status=present') },
+              { label: 'Late',     value: attendanceOverview.late ?? 0,     color: 'var(--warning)', onClick: () => navigate('/attendance') },
+              { label: 'Absent',   value: attendanceOverview.absent ?? 0,   color: 'var(--danger)',  onClick: () => navigate('/attendance?status=absent') },
+              { label: 'On Leave', value: attendanceOverview.onLeave ?? 0,  color: 'var(--primary)', onClick: () => navigate('/attendance?status=on_leave') },
+            ].map(item => (
+              <div
+                key={item.label}
+                style={{ padding: '10px 14px', background: 'var(--gray-50)', borderRadius: 8, cursor: 'pointer' }}
+                onClick={item.onClick}
+              >
+                <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>{item.value}</div>
+                <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--gray-500)', lineHeight: 1.7 }}>
+            Missing check-outs: <strong>{attendanceOverview.missingCheckouts ?? 0}</strong><br />
+            Manual attendance edits: <strong>{attendanceOverview.manualEdits ?? 0}</strong><br />
+            Attendance coverage: <strong>{attendanceOverview.coveragePct ?? 0}%</strong>
           </div>
         </div>
       </div>
 
-      {/* Time Off + Alerts */}
+      {/* Time Off Overview + Department Overview */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
         <div className="chart-card">
           <h3>Time Off Overview</h3>
-          <div className="chart-sub">Source: Leave Requests + Allocations</div>
+          <div className="chart-sub">Source: Time Off Requests + Allocations</div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -177,21 +296,18 @@ export default function Dashboard() {
                   <th>Type</th>
                   <th>Approved Days</th>
                   <th>Pending</th>
-                  <th>Remaining Balance</th>
                 </tr>
               </thead>
               <tbody>
-                {toOverview.length === 0 && (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: 16 }}>No leave data</td></tr>
-                )}
-                {toOverview.map(t => (
-                  <tr key={t.type}>
+                {timeOffOverview.map(t => (
+                  <tr
+                    key={t.typeId}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/timeoff/requests?time_off_type_id=${t.typeId}`)}
+                  >
                     <td style={{ fontWeight: 500 }}>{t.type}</td>
-                    <td>{t.approved}</td>
+                    <td>{t.approvedDays}</td>
                     <td>{t.pending}</td>
-                    <td style={{ color: t.remaining > 0 ? 'var(--success)' : 'var(--gray-400)' }}>
-                      {t.remaining > 0 ? `${t.remaining.toFixed(1)} days` : 'N/A'}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -200,29 +316,45 @@ export default function Dashboard() {
         </div>
 
         <div className="chart-card">
-          <h3>Alerts</h3>
-          <div className="chart-sub">Action items requiring attention</div>
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {missingCO > 0 && (
-              <div className="alert alert-warning">
-                <AlertTriangle size={13} /> {missingCO} employee{missingCO !== 1 ? 's' : ''} missing check-out today
-              </div>
-            )}
-            {pendingLeave > 0 && (
-              <div className="alert alert-warning">
-                <AlertTriangle size={13} /> {pendingLeave} leave request{pendingLeave !== 1 ? 's' : ''} pending approval
-              </div>
-            )}
-            {allocations.filter(a => a.status === 'draft').length > 0 && (
-              <div className="alert alert-warning">
-                <AlertTriangle size={13} /> {allocations.filter(a => a.status === 'draft').length} allocation{allocations.filter(a => a.status === 'draft').length !== 1 ? 's' : ''} pending approval
-              </div>
-            )}
-            {missingCO === 0 && pendingLeave === 0 && (
-              <div style={{ fontSize: 13, color: 'var(--gray-400)', padding: '12px 0', textAlign: 'center' }}>
-                No alerts — everything looks good.
-              </div>
-            )}
+          <h3>Department Overview</h3>
+          <div className="chart-sub">Source: Employee + Contract + Payslip totals</div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Headcount</th>
+                  <th>Monthly Salary</th>
+                </tr>
+              </thead>
+              <tbody>
+                {departmentOverview.map(d => (
+                  <tr
+                    key={d.departmentId}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/employees?department=${encodeURIComponent(d.department)}`)}
+                  >
+                    <td style={{ fontWeight: 500 }}>{d.department}</td>
+                    <td>{d.headcount}</td>
+                    <td style={{ fontWeight: 500 }}>{d.monthlySalary > 0 ? fmt(d.monthlySalary) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Models to Aggregate note */}
+      <div className="card" style={{ background: 'var(--primary-light)', border: '1px solid #c7d2fe' }}>
+        <div className="card-body" style={{ fontSize: 12, color: 'var(--primary-dark)' }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Models Aggregated on this Dashboard</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+            <div>• Employees / Departments → headcount, ownership, grouping</div>
+            <div>• Contracts → wage, schedule, active employees</div>
+            <div>• Payruns / Payslips → salary totals, paid vs pending, trend</div>
+            <div>• Attendance → presence, absences, late entries, overtime</div>
+            <div>• Time Off Requests / Allocations → leave taken and balances</div>
           </div>
         </div>
       </div>

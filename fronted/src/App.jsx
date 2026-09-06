@@ -45,6 +45,9 @@ import SalaryRuleForm       from './pages/payroll/SalaryRuleForm';
 // Dashboard
 import Dashboard from './pages/dashboard/Dashboard';
 
+// Audit Trail
+import AuditTrail from './pages/audit/AuditTrail';
+
 const ADMIN = ['admin'];
 const HR_ALL = ['hr_manager', 'hr_payroll_user', 'hr_payroll_manager', 'admin'];
 const PAYROLL_ALL = ['hr_payroll_user', 'hr_payroll_manager', 'admin'];
@@ -99,8 +102,8 @@ function AppShell() {
           {/* Payroll */}
           <Route path="/payroll/runs"               element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayrunList /></ProtectedRoute>} />
           <Route path="/payroll/runs/:id"           element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayrunForm /></ProtectedRoute>} />
-          <Route path="/payroll/payslips"           element={<ProtectedRoute allowedRoles={ALL}><PayslipList /></ProtectedRoute>} />
-          <Route path="/payroll/payslips/:id"       element={<ProtectedRoute allowedRoles={ALL}><PayslipForm /></ProtectedRoute>} />
+          <Route path="/payroll/payslips"           element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayslipList /></ProtectedRoute>} />
+          <Route path="/payroll/payslips/:id"       element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><PayslipForm /></ProtectedRoute>} />
           <Route path="/salary/structures"          element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><SalaryStructures /></ProtectedRoute>} />
           <Route path="/salary/structures/:id"      element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><SalaryStructureForm /></ProtectedRoute>} />
           <Route path="/salary/rules"               element={<ProtectedRoute allowedRoles={PAYROLL_ALL}><SalaryRules /></ProtectedRoute>} />
@@ -111,6 +114,7 @@ function AppShell() {
 
           {/* Users (Admin only) */}
           <Route path="/users"                      element={<ProtectedRoute allowedRoles={ADMIN}><UserManagement /></ProtectedRoute>} />
+          <Route path="/audit-trail"                element={<ProtectedRoute allowedRoles={ADMIN}><AuditTrail /></ProtectedRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to={currentUser?.role === 'employee' ? '/contracts' : '/employees'} replace />} />

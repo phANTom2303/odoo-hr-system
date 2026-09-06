@@ -3,7 +3,7 @@
  *
  * Owns the compute lifecycle: `draft → computed → validated → paid`. The
  * arithmetic itself lives in `payrollEngine.service.js` (which writes nothing);
- * this module supplies the pre-condition guards (algorithm doc §1a/§1b) and
+ * this module supplies the pre-condition guards (algorithm doc §1a) and
  * Phase 10 persistence (§13).
  *
  * Throws typed errors from `#lib/errors.js`; never touches `req`/`res`.
@@ -11,8 +11,6 @@
 
 import * as payRunRepo from '#repositories/payRun.repo.js';
 import * as payslipRepo from '#repositories/payslip.repo.js';
-import * as payrollDataRepo from '#repositories/payrollData.repo.js';
-import * as salaryStructureRepo from '#repositories/salaryStructure.repo.js';
 import * as payrollEngine from '#services/payrollEngine.service.js';
 import { BadRequestError, ConflictError, NotFoundError } from '#lib/errors.js';
 import { PAYRUN_STATUS, PAYSLIP_STATUS, SEVERITY } from '#lib/payroll.constants.js';
@@ -109,22 +107,18 @@ export const getEligibleEmployees = async (filters = {}) => {
  *
  * @param {object} data
  * @param {string} [data.name] - Defaults to `PR/YYYY/MMM` from `start_date`.
- * @param {number|string} data.salary_structure_id
  * @param {string} data.start_date - 'YYYY-MM-DD'
  * @param {string} data.end_date - 'YYYY-MM-DD'
  * @param {Array<number|string>} data.employee_ids - De-duplicated internally.
  * @param {number} createdBy - `req.user.sub`.
  * @returns {Promise<object>} The created pay run plus `employee_count`.
  * @throws {BadRequestError} Missing/invalid fields.
- * @throws {NotFoundError}   Unknown salary structure.
- * @throws {ConflictError}   Salary structure is inactive.
  */
 export const create = async (data, createdBy) => {
-    const { name, salary_structure_id, start_date, end_date, employee_ids } = data;
+    const { name, start_date, end_date, employee_ids } = data;
 
     // ── Required-field presence check ────────────────────────────────
     const missing = [];
-    if (salary_structure_id === undefined || salary_structure_id === null) missing.push('salary_structure_id');
     if (!start_date) missing.push('start_date');
     if (!end_date) missing.push('end_date');
     if (!Array.isArray(employee_ids) || employee_ids.length === 0) missing.push('employee_ids');
@@ -155,24 +149,9 @@ export const create = async (data, createdBy) => {
         }
     }
 
-    // ── Salary structure must exist and be active ────────────────────
-    const structureId = Number(salary_structure_id);
-    if (!Number.isInteger(structureId) || structureId <= 0) {
-        throw new BadRequestError('salary_structure_id must be a positive integer');
-    }
-
-    const structure = await salaryStructureRepo.findById(structureId);
-    if (!structure) {
-        throw new NotFoundError('Salary structure not found');
-    }
-    if (structure.status !== 'active') {
-        throw new ConflictError('Salary structure is inactive');
-    }
-
     // ── Persist (status defaults to 'draft' in the schema) ───────────
     return payRunRepo.create({
         name: name?.trim() || buildDefaultName(start_date),
-        salary_structure_id: structureId,
         start_date,
         end_date,
         created_by: createdBy,
@@ -181,48 +160,76 @@ export const create = async (data, createdBy) => {
 };
 
 /**
- * Update a draft pay run's mutable metadata (name only).
+ * Update a draft or computed pay run's mutable metadata.
  *
  * @param {number|string} id
  * @param {object} data
- * @param {string} data.name
+ * @param {string} [data.name]
+ * @param {string} [data.start_date]
+ * @param {string} [data.end_date]
+ * @param {number[]} [data.employee_ids]
  * @returns {Promise<object>} The updated pay run row.
  * @throws {NotFoundError}   When the pay run does not exist.
- * @throws {BadRequestError} When `name` is missing or blank.
- * @throws {ConflictError}   When the pay run has left draft state.
+ * @throws {ConflictError}   When the pay run has left computed state.
  */
 export const updateMeta = async (id, data) => {
-    const { name } = data ?? {};
+    const { name, start_date, end_date, employee_ids } = data ?? {};
 
     const payRun = await payRunRepo.findByIdRaw(id);
     if (!payRun) {
         throw new NotFoundError('Pay run not found');
     }
-    if (payRun.status !== PAYRUN_STATUS.DRAFT) {
-        throw new ConflictError('Only draft pay runs can be edited');
-    }
-    if (typeof name !== 'string' || name.trim().length === 0) {
-        throw new BadRequestError('Missing required fields: name');
+    if (payRun.status !== PAYRUN_STATUS.DRAFT && payRun.status !== PAYRUN_STATUS.COMPUTED) {
+        throw new ConflictError('Only draft and computed pay runs can be edited');
     }
 
-    return payRunRepo.updateMeta(id, { name: name.trim() });
+    const updatePayload = {};
+    if (name) updatePayload.name = name.trim();
+    if (start_date) updatePayload.start_date = start_date;
+    if (end_date) updatePayload.end_date = end_date;
+    if (employee_ids && Array.isArray(employee_ids)) {
+        const seen = new Set();
+        const normalisedIds = [];
+        for (const rawId of employee_ids) {
+            const id = Number(rawId);
+            if (!Number.isInteger(id) || id <= 0) {
+                throw new BadRequestError(`employee_ids must contain positive integers, received: ${rawId}`);
+            }
+            if (!seen.has(id)) {
+                seen.add(id);
+                normalisedIds.push(id);
+            }
+        }
+        updatePayload.employee_ids = normalisedIds;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+        throw new BadRequestError('Missing fields to update');
+    }
+
+    if (payRun.status === PAYRUN_STATUS.COMPUTED && (start_date || end_date || employee_ids)) {
+        await payslipRepo.deleteByPayRun(id);
+        updatePayload.status = PAYRUN_STATUS.DRAFT;
+    }
+
+    return payRunRepo.updateMeta(id, updatePayload);
 };
 
 /**
- * Delete a draft pay run (its `pay_run_employees` and payslips cascade).
+ * Delete a pay run (its `pay_run_employees` and payslips cascade).
  *
  * @param {number|string} id
  * @returns {Promise<{id: number}>}
  * @throws {NotFoundError} When the pay run does not exist.
- * @throws {ConflictError} When the pay run has left draft state.
+ * @throws {ConflictError} When the pay run has left validated state.
  */
 export const remove = async (id) => {
     const payRun = await payRunRepo.findByIdRaw(id);
     if (!payRun) {
         throw new NotFoundError('Pay run not found');
     }
-    if (payRun.status !== PAYRUN_STATUS.DRAFT) {
-        throw new ConflictError('Only draft pay runs can be deleted');
+    if (payRun.status === PAYRUN_STATUS.PAID || payRun.status === PAYRUN_STATUS.CANCELLED) {
+        throw new ConflictError('Only draft, computed, and validated pay runs can be deleted');
     }
 
     return payRunRepo.remove(id);
@@ -246,8 +253,8 @@ export const remove = async (id) => {
  *   total_gross: number, total_net: number, total_deductions: number,
  *   warning_counts: {error: number, warning: number, info: number},
  *   payslips: object[]}>}
- * @throws {NotFoundError}   Unknown pay run or missing salary structure.
- * @throws {ConflictError}   Pay run is not draft, or the structure is inactive.
+ * @throws {NotFoundError}   Unknown pay run.
+ * @throws {ConflictError}   Pay run is not draft.
  * @throws {BadRequestError} No employees selected into the run.
  */
 export const compute = async (id) => {
@@ -258,15 +265,6 @@ export const compute = async (id) => {
     }
     if (payRun.status !== PAYRUN_STATUS.DRAFT) {
         throw new ConflictError('Pay run is not in draft state');
-    }
-
-    // ── §1b: salary structure still active ───────────────────────────
-    const structure = await payrollDataRepo.findStructureForPayRun(id);
-    if (!structure) {
-        throw new NotFoundError('Salary structure for this pay run not found');
-    }
-    if (structure.status === 'inactive') {
-        throw new ConflictError('Salary structure is inactive');
     }
 
     // ── Phase 0: load everything shared across employees, once ───────

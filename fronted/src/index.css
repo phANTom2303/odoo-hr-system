@@ -633,4 +633,67 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 /* Hide number input spinners */
 .no-spinner::-webkit-outer-spin-button,
 .no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ── Condensed payslip print document ── */
+.payslip-print {
+  background: var(--white);
+  color: var(--gray-800);
+  font-size: 12.5px;
+  padding: 8px 4px;
+}
+.payslip-print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 2px solid var(--gray-800);
+}
+.payslip-print-header .brand { font-size: 16px; font-weight: 700; letter-spacing: .3px; color: var(--gray-900); }
+.payslip-print-header .doc-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gray-500); margin-top: 2px; }
+.payslip-print-header .meta { text-align: right; font-size: 11px; color: var(--gray-500); line-height: 1.6; }
+.payslip-print-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+  margin-bottom: 20px;
+}
+.payslip-print-grid .field span { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--gray-400); margin-bottom: 1px; }
+.payslip-print-grid .field strong { font-size: 12.5px; font-weight: 600; color: var(--gray-800); }
+.payslip-print-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.payslip-print-cols h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-500); margin-bottom: 6px; }
+.payslip-print table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.payslip-print td { padding: 4px 0; border-bottom: 1px solid var(--gray-100); }
+.payslip-print td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+.payslip-print tfoot td { padding-top: 7px; border-top: 1px solid var(--gray-300); border-bottom: none; font-weight: 700; }
+.payslip-print-warnings { margin-top: 16px; font-size: 10.5px; color: var(--gray-500); }
+.payslip-print-warnings li { margin-left: 16px; }
+.payslip-net-box {
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.payslip-net-box .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-500); }
+.payslip-net-box .value { font-size: 21px; font-weight: 700; color: var(--success); }
+.payslip-print-footer { margin-top: 26px; font-size: 9.5px; color: var(--gray-400); text-align: center; }
+
+/* Print export: isolate .payslip-print from the rest of the app when printing */
+@media print {
+  body * { visibility: hidden; }
+  .payslip-print, .payslip-print * { visibility: visible; }
+  .payslip-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+  }
+  .no-print { display: none !important; }
+  @page { margin: 14mm; }
+}
 .no-spinner[type=number] { -moz-appearance: textfield; }

@@ -230,6 +230,11 @@ Payslips carry their own `status` which follows the parent run: `computed` → `
 
 ## 5. Endpoints — Pay Runs
 
+> A pay run has **no `salary_structure_id` of its own** — it does not force one salary
+> structure onto every employee. Each employee's structure comes from their **contract**
+> (`contracts.salary_structure_id`) and is resolved per contract segment when the run is
+> computed, so a single pay run can correctly pay employees on different structures.
+
 ### 5.1 `GET /api/pay-runs` — list
 
 Query params (all optional):
@@ -250,7 +255,6 @@ Supply both dates to get runs overlapping a window. Sorted by `start_date` desce
     {
       "id": 14,
       "name": "October 2026 Payroll",
-      "salary_structure_id": 1,
       "start_date": "2026-10-01",
       "end_date": "2026-10-31",
       "status": "computed",
@@ -259,7 +263,6 @@ Supply both dates to get runs overlapping a window. Sorted by `start_date` desce
       "paid_at": null,
       "created_at": "2026-09-05T21:46:46.168Z",
       "updated_at": "2026-09-05T21:46:46.205Z",
-      "structure_name": "India Standard CTC",
       "created_by_name": "Anish Goenka",
       "employee_count": 2,
       "total_net": 137200
@@ -330,7 +333,6 @@ them anyway (their id is accepted), they get a zeroed payslip with `NO_ACTIVE_CO
 ```json
 {
   "name": "October 2026 Payroll",
-  "salary_structure_id": 1,
   "start_date": "2026-10-01",
   "end_date": "2026-10-31",
   "employee_ids": [3, 5]
@@ -339,10 +341,12 @@ them anyway (their id is accepted), they get a zeroed payslip with `NO_ACTIVE_CO
 
 | Field | Required | Notes |
 |---|---|---|
-| `salary_structure_id` | ✅ | Must exist and be `active` |
 | `start_date`, `end_date` | ✅ | `YYYY-MM-DD`, `end_date >= start_date` |
 | `employee_ids` | ✅ | Non-empty array of positive integers; duplicates de-duplicated silently |
 | `name` | — | Defaults to `PR/YYYY/MMM` from `start_date` (`2026-10-01` → `"PR/2026/OCT"`) |
+
+There is no `salary_structure_id` field — each selected employee's structure comes from
+their own contract and is resolved when the run is computed (see §5.5).
 
 **`201 Created`:**
 
@@ -352,7 +356,6 @@ them anyway (their id is accepted), they get a zeroed payslip with `NO_ACTIVE_CO
   "data": {
     "id": 14,
     "name": "October 2026 Payroll",
-    "salary_structure_id": 1,
     "start_date": "2026-10-01",
     "end_date": "2026-10-31",
     "status": "draft",
@@ -388,8 +391,6 @@ screen needs.
     "start_date": "2026-10-01",
     "end_date": "2026-10-31",
     "status": "computed",
-    "structure_id": 1,
-    "structure_name": "India Standard CTC",
     "created_by_name": "Anish Goenka",
     "employee_count": 2,
     "total_net": 137200,
@@ -477,8 +478,10 @@ Returns a **summary** (all money here is a **number**):
 reviewed.
 
 **Warnings never abort computation.** A payslip is always produced for every selected employee —
-including a zeroed one for an employee with no contract. Compute failing outright means a real
-error (bad status, inactive structure, empty selection), not a data problem.
+including a zeroed one for an employee with no contract. An inactive salary structure on a
+contract does **not** fail compute either — it produces a `STRUCTURE_INACTIVE` warning and the
+segment is still computed with that structure's rules. Compute failing outright means a real
+error (bad status, empty selection), not a data problem.
 
 This call is O(employees) with several queries each; for a large run show a spinner and expect
 a few seconds.
@@ -552,6 +555,10 @@ Optional query params: `pay_run_id`, `employee_id`, `status`. Sorted newest firs
 
 Rows carry `employee_name`, `pay_run_name`, `structure_name`, and the period as `start_date` /
 `end_date` (**the pay run's** period, not the payslip's), plus every payslip column.
+
+`structure_name` comes from the payslip's own `contract_id`, not the pay run — it is `null` for
+a prorated payslip that spans multiple contracts (`contract_id IS NULL`), since those may span
+more than one salary structure and there is no single one to name.
 
 `GET /api/payslips?employee_id=3&status=paid` is the payroll-history view for one employee.
 
@@ -658,8 +665,6 @@ effect is to unblock `validate`.
 |---|---|---|
 | `id` | number | |
 | `name` | string | |
-| `salary_structure_id` / `structure_id` | number | `structure_id` only on detail |
-| `structure_name` | string | |
 | `start_date`, `end_date` | `YYYY-MM-DD` | |
 | `status` | enum | `draft` \| `computed` \| `validated` \| `paid` \| `cancelled` |
 | `created_by` / `created_by_name` | number / string | |
@@ -667,6 +672,9 @@ effect is to unblock `validate`.
 | `total_net` | number | sum of payslip net; `0` before compute |
 | `validated_at`, `paid_at` | ISO timestamp \| null | |
 | `payslips` | PayslipSummary[] | **detail endpoint only** |
+
+> No `salary_structure_id` / `structure_name` field — a pay run has no structure of its own.
+> See the note at the top of §5.
 
 ### PayslipSummary (inside `GET /pay-runs/:id`)
 
@@ -730,6 +738,7 @@ still show `worked_days: "1.00"` (one paid holiday) with `worked_hours: "0.00"`.
 | `OT_NO_POLICY` | 🟠 warning | ❌ | `hours` | Overtime hours exist but the contract has no OT policy — **no OT pay generated** |
 | `COMP_OFF_CREDITED` | 🔵 info | ❌ | `hours` | Overtime became compensatory off, not pay |
 | `NEGATIVE_NET` | 🟠 warning | ❌ | `computed_net`, `gross_salary`, `total_deductions` | Net went negative; **floored to 0** |
+| `STRUCTURE_INACTIVE` | 🟠 warning | ❌ | `contract_id`, `structure_id`, `structure_name` | A contract segment's salary structure is `inactive`; that segment is still computed with its rules |
 
 Suggested UI: red badge for `error` (with a Review action), amber for `warning`, grey/blue
 info chip for `info`. Only the two error codes ever gate the workflow.
@@ -746,14 +755,11 @@ info chip for `info`. Only the two error codes ever gate the workflow.
 | 400 | `start_date and end_date must be ISO dates in YYYY-MM-DD format` | bad date format |
 | 400 | `end_date must be greater than or equal to start_date` | inverted period |
 | 400 | `employee_ids must contain positive integers, received: <x>` | bad id in array |
-| 400 | `salary_structure_id must be a positive integer` | |
 | 400 | `Pay run has no selected employees` | compute on a run with an empty selection |
 | 401 | `Authentication required. No token provided.` *(`message` key)* | no cookie sent — check `credentials: 'include'` |
 | 401 | `Token expired.` *(`message` key)* | re-login |
 | 403 | `Access denied. Insufficient permissions.` *(`message` key)* | role lacks the endpoint |
 | 404 | `Pay run not found` / `Payslip not found` | |
-| 404 | `Salary structure not found` | unknown `salary_structure_id` |
-| 409 | `Salary structure is inactive` | structure deactivated |
 | 409 | `Pay run is not in draft state` | compute on a non-draft run |
 | 409 | `Pay run is not in computed state` | validate at the wrong stage |
 | 409 | `Pay run is not in validated state` | mark-paid at the wrong stage |

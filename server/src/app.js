@@ -24,6 +24,8 @@ import payslipRouter         from '#routes/payslip.routes.js';
 import attendanceRouter      from '#routes/attendance.routes.js';
 import allocationRouter      from '#routes/allocation.routes.js';
 import leaveRequestRouter    from '#routes/leaveRequest.routes.js';
+import dashboardRouter       from '#routes/dashboard.routes.js';
+import auditRouter           from '#routes/audit.routes.js';
 
 const app = express();
 
@@ -55,6 +57,8 @@ app.use('/api/allocations',       allocationRouter);
 app.use('/api/leave-requests',    leaveRequestRouter);
 app.use('/api/pay-runs',          payRunRouter);
 app.use('/api/payslips',          payslipRouter);
+app.use('/api/dashboard',         dashboardRouter);
+app.use('/api/audit-logs',        auditRouter);
 
 // ── Global Error Handler ──────────────────────────────────────────────
 app.use((err, req, res, next) => {

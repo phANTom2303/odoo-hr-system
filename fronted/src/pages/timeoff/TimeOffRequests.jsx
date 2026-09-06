@@ -11,17 +11,19 @@ export default function TimeOffRequests() {
   const { currentUser } = useApp();
   const [searchParams] = useSearchParams();
   const empFilter = searchParams.get('employee');
+  const typeFilter = searchParams.get('time_off_type_id');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
 
   const isHR = ['admin', 'hr_manager', 'hr_payroll_user', 'hr_payroll_manager'].includes(currentUser?.role);
 
   // Employees only see their own requests
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['leave-requests', { empFilter, statusFilter }],
+    queryKey: ['leave-requests', { empFilter, statusFilter, typeFilter }],
     queryFn: () => getLeaveRequests({
       employee_id: isHR ? (empFilter || undefined) : currentUser?.id,
       status: statusFilter || undefined,
+      time_off_type_id: typeFilter || undefined,
     }).then(r => r.data),
   });
 

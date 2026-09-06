@@ -1,4 +1,4 @@
-# PeoplePay360 — Payroll Computation Algorithm (v2.0)
+# PeoplePay360 — Payroll Computation Algorithm (v2.1)
 ### *Exact flow when a Payroll person clicks "Compute" on a Pay Run*
 
 > **Audience:** Backend developers implementing `POST /pay-runs/:id/compute`.
@@ -6,6 +6,16 @@
 > Every SQL query and server-side calculation is spelled out in order.
 
 ---
+
+### Changelog (v2.0 → v2.1)
+
+| Change | Rationale |
+|---|---|
+| Removed `salary_structure_id` from `pay_runs` entirely | A pay run no longer forces one structure onto every employee. Each contract already carries its own `salary_structure_id`, and mixed-structure pay runs (e.g. interns vs. full-time) were previously impossible to compute correctly. |
+| Salary rules are resolved **per segment**, from `segment.contract.salary_structure_id`, instead of once in Phase 0 | Employees whose contracts reference different structures now get the correct rule set each. |
+| Added per-structure `ruleCache` and `structureCache` (keyed by `structure_id`) alongside the existing per-schedule cache | Multiple contracts/segments frequently share a structure; caching avoids redundant `salary_rules` / `salary_structures` queries within one employee's compute, and across employees in the same run. |
+| Removed the pay-run-level "salary structure active" guard (pre-condition 1b) | There is no single structure to check anymore. Replaced by a per-segment check (see Phase 5A) that warns per affected contract instead of blocking the whole run. |
+| Added `STRUCTURE_INACTIVE` warning | Fires when a segment's contract references a structure whose `status = 'inactive'`; computation still proceeds using that structure's rules (matches the non-blocking style of the other warnings). |
 
 ### Changelog (v1.0 → v2.0)
 
@@ -51,21 +61,18 @@
 
 ```sql
 -- 1a. Confirm pay run exists and is in a computable state
-SELECT id, name, salary_structure_id, start_date, end_date, status
+SELECT id, name, start_date, end_date, status
 FROM pay_runs
 WHERE id = :pay_run_id;
 -- If NOT FOUND → 404
 -- If status NOT IN ('draft') → 409 "Pay run is not in draft state"
 ```
 
-```sql
--- 1b. Confirm the salary structure is still active
-SELECT ss.id, ss.name, ss.status
-FROM salary_structures ss
-JOIN pay_runs pr ON pr.salary_structure_id = ss.id
-WHERE pr.id = :pay_run_id;
--- If status = 'inactive' → 409 "Salary structure is inactive"
-```
+> **v2.1:** There is no pay-run-level "salary structure active" guard anymore —
+> a pay run has no `salary_structure_id` of its own. Structure-active checks
+> now happen **per segment**, against each contract's own structure, inside
+> the employee loop (Phase 5A). An inactive structure emits a
+> `STRUCTURE_INACTIVE` warning instead of aborting the whole run.
 
 > If pre-conditions fail, **abort entirely** — no payslips are created.
 
@@ -93,24 +100,31 @@ DOW_MAP = {
 > `EXTRACT(ISODOW FROM date)` returns these exact values (1=Monday … 7=Sunday).
 > All workday counting, holiday-on-workday, and missing-checkin queries use this.
 
-### 2a. Load Salary Rules
+### 2a. Salary Rules — Resolved Per Segment (not loaded here)
 
-```sql
-SELECT
-  sr.id,
-  sr.code,
-  sr.name,
-  sr.category,
-  sr.sequence,
-  sr.rule_type,
-  sr.fixed_amount,
-  sr.percentage,
-  sr.base_rule_id
-FROM salary_rules sr
-WHERE sr.structure_id = :salary_structure_id
-ORDER BY sr.sequence ASC;
--- Store as: rules[]
-```
+> **v2.1:** A pay run no longer has a single `salary_structure_id`, so there is
+> no global `rules[]` to load in Phase 0. Each contract carries its own
+> `salary_structure_id`, and rules are fetched lazily, per segment, in
+> **Phase 5A** — the first segment referencing a given structure queries it;
+> every subsequent segment (same employee or a different one) reuses the
+> cached result for that `structure_id`:
+>
+> ```sql
+> SELECT
+>   sr.id,
+>   sr.code,
+>   sr.name,
+>   sr.category,
+>   sr.sequence,
+>   sr.rule_type,
+>   sr.fixed_amount,
+>   sr.percentage,
+>   sr.base_rule_id
+> FROM salary_rules sr
+> WHERE sr.structure_id = :structure_id
+> ORDER BY sr.sequence ASC;
+> -- Cached as: ruleCache[structure_id] = rules[]
+> ```
 
 ### 2b. Load Company Holidays in Period
 
@@ -354,64 +368,85 @@ Store as `daily_scheduled_hours` for this segment.
 
 ## 7. Phase 5A — Salary Rule Execution (Per Segment)
 
-For each segment S, execute salary rules in sequence order:
+For each segment S, resolve **that segment's own rule set** and structure
+status, then execute the rules in sequence order:
 
 ```
-computed_values = {}   -- key: rule.id, value: computed amount (float)
-segment_lines   = []
+FOR each segment S in segments:
 
-FOR each rule R in rules (ordered by sequence ASC):
+  structure_id = S.contract.salary_structure_id
 
-  IF R.rule_type == 'fixed':
-    -- Special case: BASIC rule uses contract wage, not fixed_amount
-    IF R.code == 'BASIC':
-      base_amount = S.contract.wage
+  -- Structure-active check (replaces the old pay-run-level guard §1b).
+  -- Cached per structure_id — queried once even across many segments/employees.
+  structure = structureCache[structure_id] ??= LOAD salary_structures WHERE id = structure_id
+  IF structure IS NULL OR structure.status == 'inactive':
+    → ADD warning: STRUCTURE_INACTIVE (severity: warning,
+        details: { contract_id: S.contract.id, structure_id, structure_name })
+    -- NOT a hard stop: computation continues using this structure's rules.
+
+  -- Rule lookup, cached per structure_id (same cache pattern as the schedule cache).
+  rules = ruleCache[structure_id] ??= LOAD salary_rules WHERE structure_id = structure_id ORDER BY sequence ASC
+
+  computed_values = {}   -- key: rule.id, value: computed amount (float)
+                          -- fresh per segment — NOT shared across segments
+  segment_lines   = []
+
+  FOR each rule R in rules (ordered by sequence ASC):
+
+    IF R.rule_type == 'fixed':
+      -- Special case: BASIC rule uses contract wage, not fixed_amount
+      IF R.code == 'BASIC':
+        base_amount = S.contract.wage
+      ELSE:
+        base_amount = R.fixed_amount
+
+      amount = ROUND(base_amount * S.proration_factor, 2)
+
+    ELIF R.rule_type == 'percentage':
+      -- base_rule is guaranteed to have a lower sequence (already computed)
+      base_value = computed_values[R.base_rule_id]
+      -- base is already prorated; do NOT apply proration_factor again
+      amount = ROUND(base_value * R.percentage / 100, 2)
+
+    -- Placeholder rules (GROSS, NET): set to 0 now; updated in Phase 7
+    IF R.code IN ('GROSS', 'NET'):
+      amount = 0.00
+
+    -- computed_values holds the UNSIGNED magnitude on purpose: a percentage rule
+    -- based on a deduction (e.g. "5% of PF") must compute off its face value.
+    computed_values[R.id] = amount
+
+    -- Deduction lines are PERSISTED NEGATIVE so every reduction on a payslip
+    -- carries one consistent sign — the synthetic UNPAID_LV line (Phase 6) and
+    -- any future deduction line included. Phase 7 sums deductions with ABS(),
+    -- so the aggregates are unaffected by this sign.
+    IF R.category == 'deduction':
+      signed_amount = -ABS(amount)
     ELSE:
-      base_amount = R.fixed_amount
+      signed_amount = amount
 
-    amount = ROUND(base_amount * S.proration_factor, 2)
+    segment_lines.append({
+      rule_id:          R.id,
+      rule_code:        R.code,
+      rule_name:        R.name,       -- SNAPSHOT: copied from rule at compute time
+      category:         R.category,   -- SNAPSHOT
+      sequence:         R.sequence,
+      amount:           signed_amount,   -- NEGATIVE for category = 'deduction'
+      contract_id:      S.contract.id,
+      segment_start:    S.start,
+      segment_end:      S.end,
+      proration_factor: ROUND(S.proration_factor, 4)
+    })
 
-  ELIF R.rule_type == 'percentage':
-    -- base_rule is guaranteed to have a lower sequence (already computed)
-    base_value = computed_values[R.base_rule_id]
-    -- base is already prorated; do NOT apply proration_factor again
-    amount = ROUND(base_value * R.percentage / 100, 2)
-
-  -- Placeholder rules (GROSS, NET): set to 0 now; updated in Phase 7
-  IF R.code IN ('GROSS', 'NET'):
-    amount = 0.00
-
-  -- computed_values holds the UNSIGNED magnitude on purpose: a percentage rule
-  -- based on a deduction (e.g. "5% of PF") must compute off its face value.
-  computed_values[R.id] = amount
-
-  -- Deduction lines are PERSISTED NEGATIVE so every reduction on a payslip
-  -- carries one consistent sign — the synthetic UNPAID_LV line (Phase 6) and
-  -- any future deduction line included. Phase 7 sums deductions with ABS(),
-  -- so the aggregates are unaffected by this sign.
-  IF R.category == 'deduction':
-    signed_amount = -ABS(amount)
-  ELSE:
-    signed_amount = amount
-
-  segment_lines.append({
-    rule_id:          R.id,
-    rule_code:        R.code,
-    rule_name:        R.name,       -- SNAPSHOT: copied from rule at compute time
-    category:         R.category,   -- SNAPSHOT
-    sequence:         R.sequence,
-    amount:           signed_amount,   -- NEGATIVE for category = 'deduction'
-    contract_id:      S.contract.id,
-    segment_start:    S.start,
-    segment_end:      S.end,
-    proration_factor: ROUND(S.proration_factor, 4)
-  })
-
-all_lines.extend(segment_lines)
+  all_lines.extend(segment_lines)
 ```
 
 > **Multi-contract payslips** will have multiple lines per rule code (one per segment).
 > This is by design — each segment is a separate snapshot row in `payslip_lines`.
+> Since rules are resolved per segment's own `salary_structure_id`, a
+> multi-contract employee whose contracts reference **different** structures
+> gets a genuinely different rule set per segment (different codes, sequences,
+> even rule counts) — not just re-prorated copies of the same rules.
 
 ---
 
@@ -900,6 +935,7 @@ RETURN (start1 <= end2) AND (end1 >= start2)
 | `OT_NO_POLICY` | Overtime hours exist but contract has no OT policy | 🟠 Warning | ❌ No | ✅ Yes [P2] |
 | `COMP_OFF_CREDITED` | OT converted to comp-off (no OT pay generated) | 🟡 Info | ❌ No | ✅ Yes [P2] |
 | `NEGATIVE_NET` | Net salary computed as negative after deductions | 🟠 Warning | ❌ No | ✅ Yes (floored to 0) |
+| `STRUCTURE_INACTIVE` | A segment's contract references a `salary_structure` with `status = 'inactive'` | 🟠 Warning | ❌ No | ✅ Yes (computed using that structure's rules) |
 
 ### Warning JSON Shape (stored in `payslips.warnings` JSONB column)
 
@@ -982,10 +1018,10 @@ implementation** must adopt the `DOW_MAP` + `EXTRACT(ISODOW)` pattern:
 POST /pay-runs/:id/compute
 │
 ├─ [Guard] Pay run status == 'draft'?        No  → 409
-├─ [Guard] Salary structure active?          No  → 409
 │
-├─ Phase 0: Load rules[], paid_holidays[], selected_employees[]
+├─ Phase 0: Load paid_holidays[], selected_employees[]
 │           Define DOW_MAP constant
+│           (no rules[] load — resolved per segment in Phase 5A)
 │
 └─ FOR each employee E:
    │
@@ -1006,14 +1042,18 @@ POST /pay-runs/:id/compute
    │   ├─ proration_factor       = segment_workdays / total_period_workdays
    │   └─ daily_scheduled_hours  = total_weekly_hours / active_schedule_days
    │
-   ├─ Phase 5A (per segment, per rule in sequence order):
-   │   ├─ BASIC (fixed)      → wage × proration_factor
-   │   ├─ HRA   (% of BASIC) → BASIC_amount × 40%
-   │   ├─ CONV  (fixed)      → 1600 × proration_factor
-   │   ├─ PF    (% of BASIC) → BASIC_amount × 12%    [deduction → stored −ve]
-   │   ├─ PT    (fixed)      → 200 × proration_factor [deduction → stored −ve]
-   │   ├─ GROSS (placeholder)→ 0 (updated in Phase 7)
-   │   └─ NET   (placeholder)→ 0 (updated in Phase 7)
+   ├─ Phase 5A (per segment):
+   │   ├─ structure_id = segment.contract.salary_structure_id
+   │   ├─ structure inactive?  Yes → warn: STRUCTURE_INACTIVE (continues anyway)
+   │   ├─ rules = ruleCache[structure_id] (loaded + cached on first use)
+   │   └─ per rule in sequence order:
+   │       ├─ BASIC (fixed)      → wage × proration_factor
+   │       ├─ HRA   (% of BASIC) → BASIC_amount × 40%
+   │       ├─ CONV  (fixed)      → 1600 × proration_factor
+   │       ├─ PF    (% of BASIC) → BASIC_amount × 12%    [deduction → stored −ve]
+   │       ├─ PT    (fixed)      → 200 × proration_factor [deduction → stored −ve]
+   │       ├─ GROSS (placeholder)→ 0 (updated in Phase 7)
+   │       └─ NET   (placeholder)→ 0 (updated in Phase 7)
    │
    ├─ Phase 5B [P2] (per segment):
    │   ├─ Contract has OT policy?    No  → check for untracked OT → warn OT_NO_POLICY
