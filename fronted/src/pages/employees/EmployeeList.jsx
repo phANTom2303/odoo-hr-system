@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, LayoutGrid, List } from 'lucide-react';
 import { getEmployees } from '../../api/employees';
@@ -15,10 +15,11 @@ const initials = (e) => {
 export default function EmployeeList() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
   const [view, setView]   = useState('kanban');
   const [search, setSearch] = useState('');
-  const [dept, setDept]   = useState('');
-  const [status, setStatus] = useState('');
+  const [dept, setDept]   = useState(searchParams.get('department') || '');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
 
   const isEmployeeOnly = currentUser?.role === 'Employee' || currentUser?.role?.name === 'Employee' || currentUser?.role === 'employee';
 

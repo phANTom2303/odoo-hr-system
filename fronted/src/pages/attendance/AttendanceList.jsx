@@ -9,7 +9,7 @@ export default function AttendanceList() {
   const [params] = useSearchParams();
   const empFilter = params.get('employee');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(params.get('status') || '');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['attendance', { empFilter, status }],

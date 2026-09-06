@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPayRuns, getEligibleEmployees, createPayRun, n } from '../../api/payroll';
@@ -18,8 +18,9 @@ const STATUS_BADGE = {
 export default function PayrunList() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
   const [showWizard, setShowWizard] = useState(false);
 
   const canManageRuns = CAN_MANAGE_RUNS.includes(currentUser?.role);
